@@ -26,6 +26,7 @@ jobs:
       - name: Commit and push
         run: |
           echo "source/" >> .gitignore
+          git rm -r --cached source/ 2>/dev/null || true
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add .
