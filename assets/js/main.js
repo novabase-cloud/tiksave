@@ -20,6 +20,52 @@ function buildHeader() {
     ? el('img', { class: 'app-header-avatar', src: user.avatarUrl, alt: '' })
     : el('div', { class: 'app-header-avatar-placeholder' }, [(user?.name?.[0] || 'G').toUpperCase()]);
 
+  let dropdownOpen = false;
+  let dropdownEl = null;
+
+  function closeDropdown() {
+    if (dropdownEl) {
+      dropdownEl.remove();
+      dropdownEl = null;
+    }
+    dropdownOpen = false;
+    document.removeEventListener('click', closeDropdown);
+  }
+
+  function onDocClick(e) {
+    if (dropdownOpen) closeDropdown();
+  }
+
+  function toggleDropdown(e) {
+    e.stopPropagation();
+    if (dropdownOpen) { closeDropdown(); return; }
+
+    dropdownEl = el('div', { class: 'user-dropdown' }, [
+      el('button', {
+        class: 'user-dropdown-item user-dropdown-item--logout',
+        onClick: (ev) => {
+          ev.stopPropagation();
+          closeDropdown();
+          clearUserListCache();
+          logout();
+          window.location.hash = '#/login';
+        },
+      }, [
+        el('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
+          el('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }),
+          el('polyline', { points: '16 17 21 12 16 7' }),
+          el('line', { x1: '21', y1: '12', x2: '9', y2: '12' }),
+        ]),
+        'Logout',
+      ]),
+    ]);
+
+    const wrapper = e.currentTarget.parentElement;
+    wrapper.appendChild(dropdownEl);
+    dropdownOpen = true;
+    document.addEventListener('click', onDocClick);
+  }
+
   return el('header', { class: 'app-header' }, [
     getSidebarToggleButton(),
     el('div', { class: 'app-header-brand' }, [
@@ -44,20 +90,9 @@ function buildHeader() {
       }, [
         themeIcon(isDark()),
       ]),
-      el('div', { class: 'app-header-user' }, [
+      el('div', { class: 'app-header-user', onClick: toggleDropdown }, [
         avatarEl,
         el('span', { class: 'app-header-username' }, [user?.name || 'Guest']),
-      ]),
-      el('button', {
-        class: 'btn-icon',
-        title: 'Logout',
-        onClick: () => { clearUserListCache(); logout(); window.location.hash = '#/login'; },
-      }, [
-        el('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
-          el('path', { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' }),
-          el('polyline', { points: '16 17 21 12 16 7' }),
-          el('line', { x1: '21', y1: '12', x2: '9', y2: '12' }),
-        ]),
       ]),
     ]),
   ]);
