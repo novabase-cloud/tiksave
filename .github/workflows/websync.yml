@@ -9,29 +9,28 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TIKSAVE_WEB_DEPLOY_TOKEN }}
+
       - name: Get source owner from token
         run: |
           OWNER=$(curl -s -H "Authorization: token ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN }}" \
             https://api.github.com/user | jq -r .login)
-          echo "SOURCE_OWNER=$OWNER" >> $GITHUB_ENV
+          echo "SOURCE_REPO=$OWNER/tiktok-archiver-hf" >> $GITHUB_ENV
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ env.SOURCE_OWNER }}/tiktok-archiver-hf
+          repository: ${{ env.SOURCE_REPO }}
           token: ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN }}
+          sparse-checkout: template
           path: source
 
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.TIKSAVE_WEB_DEPLOY_TOKEN }}
-          path: target
-
-      - name: Mirror template contents
-        run: rsync -av --delete source/template/ target/
+      - name: Copy template contents
+        run: rsync -av source/template/ $GITHUB_WORKSPACE/
 
       - name: Commit and push
         run: |
-          cd target
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add .
