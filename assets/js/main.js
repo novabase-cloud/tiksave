@@ -29,7 +29,7 @@ function buildHeader() {
       dropdownEl = null;
     }
     dropdownOpen = false;
-    document.removeEventListener('click', closeDropdown);
+    document.removeEventListener('click', onDocClick);
   }
 
   function onDocClick(e) {
@@ -48,7 +48,7 @@ function buildHeader() {
           closeDropdown();
           clearUserListCache();
           logout();
-          window.location.hash = '#/login';
+          showLoginScreen();
         },
       }, [
         el('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
