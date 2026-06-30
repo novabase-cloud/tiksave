@@ -13,15 +13,9 @@ jobs:
         with:
           token: ${{ secrets.TIKSAVE_WEB_DEPLOY_TOKEN }}
 
-      - name: Get source owner from token
-        run: |
-          OWNER=$(curl -s -H "Authorization: token ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN }}" \
-            https://api.github.com/user | jq -r .login)
-          echo "SOURCE_REPO=$OWNER/tiktok-archiver-hf" >> $GITHUB_ENV
-
       - uses: actions/checkout@v4
         with:
-          repository: ${{ env.SOURCE_REPO }}
+          repository: ${{ secrets.SOURCE_REPO }}
           token: ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN }}
           sparse-checkout: template
           path: source
@@ -31,6 +25,7 @@ jobs:
 
       - name: Commit and push
         run: |
+          echo "source/" >> .gitignore
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add .
