@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/resize.js": {
+      "includeFiles": "node_modules/@img/**"
+    }
+  }
+}
