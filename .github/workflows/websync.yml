@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN }}
+          token: ${{ secrets.TIKSAVE_WEB_DEPLOY_TOKEN }}
           path: target
 
       - name: Mirror template contents
