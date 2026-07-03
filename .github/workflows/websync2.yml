@@ -24,7 +24,9 @@ jobs:
           path: source
 
       - name: Copy template contents
-        run: rsync -av source/template/ $GITHUB_WORKSPACE/
+        run: |
+          rsync -av source/template/ $GITHUB_WORKSPACE/
+          rm -rf .github/workflows/websync2.yml
 
       - name: Commit and push
         run: |
