@@ -5,13 +5,16 @@ on:
     - cron: '0 17 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.TIKSAVE_WEB_DEPLOY_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
@@ -27,8 +30,8 @@ jobs:
         run: |
           echo "source/" >> .gitignore
           git rm -r --cached source/ 2>/dev/null || true
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "novabase-tiksave"
+          git config user.email "tiksave.novabasecloud.com"
           git add .
           if git diff --cached --quiet; then
             echo "No changes to sync"
