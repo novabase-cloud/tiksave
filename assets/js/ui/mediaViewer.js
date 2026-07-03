@@ -168,13 +168,13 @@ class MediaViewer {
 
     if (file) {
       infoRows.push(
-        el('div', { class: 'media-info-row' }, [
+        el('div', { class: 'media-info-row media-info-row-file-size' }, [
           el('span', { class: 'media-info-label' }, 'file size:'),
           el('span', { class: 'media-info-value' }, this.formatSize(file.size)),
         ])
       );
       infoRows.push(
-        el('div', { class: 'media-info-row' }, [
+        el('div', { class: 'media-info-row media-info-row-file-path' }, [
           el('span', { class: 'media-info-label' }, 'file on disk:'),
           el('span', { class: 'media-info-value media-info-path' }, file.path),
         ])
@@ -189,7 +189,7 @@ class MediaViewer {
 
     if (tiktokUrl) {
       infoRows.push(
-        el('div', { class: 'media-info-row' }, [
+        el('div', { class: 'media-info-row media-info-row-tiktok-link' }, [
           this.infoLabel(ICONS.externalLink, 'TikTok link:'),
           el('a', { class: 'media-info-value media-info-link', href: tiktokUrl, target: '_blank', rel: 'noopener' }, tiktokUrl),
         ])
@@ -197,7 +197,7 @@ class MediaViewer {
     }
 
     if (username) {
-      infoRows.push(el('div', { class: 'media-info-row' }, [
+      infoRows.push(el('div', { class: 'media-info-row media-info-row-author' }, [
         this.infoLabel(ICONS.users, 'author:'),
         el('span', { class: 'media-info-value' }, [`@${username}`]),
       ]));
@@ -205,7 +205,7 @@ class MediaViewer {
 
     if (post?.createTime) {
       const date = new Date(post.createTime * 1000);
-      infoRows.push(el('div', { class: 'media-info-row' }, [
+      infoRows.push(el('div', { class: 'media-info-row media-info-row-posted' }, [
         this.infoLabel(ICONS.calendar, 'posted:'),
         el('span', { class: 'media-info-value' }, date.toLocaleDateString()),
       ]));
@@ -214,15 +214,13 @@ class MediaViewer {
     const userInfo = this.profileInfo?.userInfo;
     if (userInfo?.username_history?.length > 0) {
       const historyText = userInfo.username_history.map(h => `@${h.username}`).join(' \u2192 ');
-      infoRows.push(el('div', { class: 'media-info-row' }, [
+      infoRows.push(el('div', { class: 'media-info-row media-info-row-username-history' }, [
         this.infoLabel(ICONS.edit, 'username history:'),
         el('span', { class: 'media-info-value', style: { fontSize: 12 } }, [historyText]),
       ]));
     }
 
-    const descSection = el('div', { class: 'media-desc-section' });
-    descSection.replaceChildren(...this.createPlaceholderRows());
-    infoRows.push(descSection);
+    infoRows.push(...this.createPlaceholderRows());
 
     const infoPanel = el('div', { class: 'media-info-panel' }, infoRows);
 
@@ -260,12 +258,12 @@ class MediaViewer {
     if (postPath) {
       const cached = this.descCache.get(postPath);
       if (cached) {
-        this.populateDescSection(descSection, cached, post);
+        this.populateDescSection(cached, post);
       } else {
         fetchPostDescription(postPath).then(data => {
           if (!data || myGen !== this.renderGen) return;
           this.descCache.set(postPath, data);
-          this.populateDescSection(descSection, data, post);
+          this.populateDescSection(data, post);
         }).catch(() => {});
       }
     }
@@ -283,26 +281,26 @@ class MediaViewer {
 
   createPlaceholderRows() {
     const items = [
-      [ICONS.heart, 'likes:'],
-      [ICONS.play, 'plays:'],
-      [ICONS.messageCircle, 'comments:'],
-      [ICONS.share, 'shares:'],
-      [ICONS.star, 'saves:'],
-      [ICONS.fileText, 'caption:'],
-      [ICONS.hash, 'hashtags:'],
-      [ICONS.music, 'music:'],
-      [ICONS.calendar, 'posted:'],
-      [ICONS.users, 'author followers:'],
+      ['media-info-row-likes', ICONS.heart, 'likes:'],
+      ['media-info-row-plays', ICONS.play, 'plays:'],
+      ['media-info-row-comments', ICONS.messageCircle, 'comments:'],
+      ['media-info-row-shares', ICONS.share, 'shares:'],
+      ['media-info-row-saves', ICONS.star, 'saves:'],
+      ['media-info-row-caption', ICONS.fileText, 'caption:'],
+      ['media-info-row-hashtags', ICONS.hash, 'hashtags:'],
+      ['media-info-row-music', ICONS.music, 'music:'],
+      ['media-info-row-posted-desc', ICONS.calendar, 'posted:'],
+      ['media-info-row-author-followers', ICONS.users, 'author followers:'],
     ];
-    return items.map(([path, text]) =>
-      el('div', { class: 'media-info-row' }, [
+    return items.map(([cls, path, text]) =>
+      el('div', { class: `media-info-row ${cls}` }, [
         this.infoLabel(path, text),
         el('span', { class: 'media-info-value media-info-placeholder' }, '\u2014'),
       ])
     );
   }
 
-  populateDescSection(section, data, post) {
+  populateDescSection(data, post) {
     const stats = data.stats || {};
     const desc = data.desc || post?.desc || '';
     const challenges = data.challenges || [];
@@ -315,34 +313,33 @@ class MediaViewer {
     const dateStr = data.createTime
       ? new Date(data.createTime * 1000).toLocaleDateString()
       : null;
-    const existing = section.parentElement?.querySelector('.media-info-row:has(.media-info-label[class*="posted"])');
+    const existing = this.backdrop?.querySelector('.media-info-row-posted');
 
-    const rows = [
-      this.statRow(ICONS.heart, 'likes:', stats.diggCount != null ? formatNumber(stats.diggCount) : '\u2014'),
-      this.statRow(ICONS.play, 'plays:', stats.playCount != null ? formatNumber(stats.playCount) : '\u2014'),
-      this.statRow(ICONS.messageCircle, 'comments:', stats.commentCount != null ? String(stats.commentCount) : '\u2014'),
-      this.statRow(ICONS.share, 'shares:', stats.shareCount != null ? String(stats.shareCount) : '\u2014'),
-      this.statRow(ICONS.star, 'saves:', stats.collectCount != null ? String(stats.collectCount) : '\u2014'),
-      el('div', { class: 'media-info-row' }, [
-        this.infoLabel(ICONS.fileText, 'caption:'),
-        el('span', { class: 'media-info-value' }, desc || '\u2014'),
-      ]),
-      el('div', { class: 'media-info-row' }, [
-        this.infoLabel(ICONS.hash, 'hashtags:'),
-        el('span', { class: 'media-info-value' }, tags.length ? ['#', tags.join(' #')] : '\u2014'),
-      ]),
-      el('div', { class: 'media-info-row' }, [
-        this.infoLabel(ICONS.music, 'music:'),
-        el('span', { class: 'media-info-value' }, (musicTitle || musicAuthor) ? [musicAuthor ? `${musicAuthor} \u2014 ` : '', musicTitle].filter(Boolean).join('') : '\u2014'),
-      ]),
-      el('div', { class: 'media-info-row' }, [
-        this.infoLabel(ICONS.calendar, 'posted:'),
-        el('span', { class: 'media-info-value' }, (dateStr && !existing) ? dateStr : '\u2014'),
-      ]),
-      this.statRow(ICONS.users, 'author followers:', authorStats.followerCount != null ? formatNumber(authorStats.followerCount) : '\u2014'),
-    ];
+    this.setRowValue('media-info-row-likes', stats.diggCount != null ? formatNumber(stats.diggCount) : '\u2014');
+    this.setRowValue('media-info-row-plays', stats.playCount != null ? formatNumber(stats.playCount) : '\u2014');
+    this.setRowValue('media-info-row-comments', stats.commentCount != null ? String(stats.commentCount) : '\u2014');
+    this.setRowValue('media-info-row-shares', stats.shareCount != null ? String(stats.shareCount) : '\u2014');
+    this.setRowValue('media-info-row-saves', stats.collectCount != null ? String(stats.collectCount) : '\u2014');
+    this.setRowValue('media-info-row-caption', desc || '\u2014');
+    this.setRowValue('media-info-row-hashtags', tags.length ? '#' + tags.join(' #') : '\u2014');
 
-    section.replaceChildren(...rows);
+    const musicStr = (musicTitle || musicAuthor)
+      ? [musicAuthor ? `${musicAuthor} \u2014 ` : '', musicTitle].filter(Boolean).join('')
+      : '\u2014';
+    this.setRowValue('media-info-row-music', musicStr);
+
+    if (dateStr && !existing) {
+      this.setRowValue('media-info-row-posted-desc', dateStr);
+    }
+
+    this.setRowValue('media-info-row-author-followers', authorStats.followerCount != null ? formatNumber(authorStats.followerCount) : '\u2014');
+  }
+
+  setRowValue(cls, value) {
+    const el = this.backdrop?.querySelector(`.${cls} .media-info-value`);
+    if (!el) return;
+    el.classList.remove('media-info-placeholder');
+    el.textContent = value;
   }
 
   statRow(iconPath, label, value) {
