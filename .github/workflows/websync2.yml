@@ -1,0 +1,44 @@
+name: Websync2
+
+on:
+  schedule:
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.SOURCE_REPO }}
+          token: ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN }}
+          sparse-checkout: template
+          path: source
+
+      - name: Copy template contents
+        run: |
+          rsync -av --exclude='.github/' source/template/ $GITHUB_WORKSPACE/
+
+      - name: Commit and push
+        run: |
+          echo "source/" >> .gitignore
+          git rm -r --cached source/ 2>/dev/null || true
+          git config user.name "novabase-tiksave"
+          git config user.email "tiksave.novabasecloud.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to sync"
+            exit 0
+          fi
+          COUNT=$(git diff --cached --name-only | wc -l)
+          TIMESTAMP=$(date -u +'%Y-%m-%d %H:%M:%S.%3N UTC')
+          git commit -m "Sync: $COUNT file(s) — $TIMESTAMP"
+          git push
