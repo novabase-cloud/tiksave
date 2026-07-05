@@ -1,10 +1,17 @@
+const SVG_TAGS = new Set(['svg', 'path', 'g', 'circle', 'rect', 'line', 'polyline', 'polygon', 'text', 'defs', 'clipPath', 'filter', 'feDropShadow', 'feGaussianBlur', 'feOffset', 'feBlend', 'feColorMatrix', 'feFlood', 'use', 'stop', 'linearGradient', 'radialGradient', 'mask', 'pattern', 'marker']);
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 export function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
+  const node = SVG_TAGS.has(tag) ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
   const safeAttrs = attrs || {};
   for (const [key, value] of Object.entries(safeAttrs)) {
     if (value == null || value === false) continue;
     if (key === 'class' || key === 'className') {
-      node.className = value;
+      if (node instanceof SVGElement) {
+        node.setAttribute('class', value);
+      } else {
+        node.className = value;
+      }
     } else if (key === 'style' && typeof value === 'object') {
       Object.assign(node.style, value);
     } else if (key.startsWith('on') && typeof value === 'function') {

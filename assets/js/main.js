@@ -1,6 +1,6 @@
 import { $, el, mount } from './utils/dom.js';
 import { isAuthenticated, loginWithCode, validateToken, logout, getUserInfo } from './auth.js';
-import { initRouter, onRoute } from './router.js';
+import { initRouter, onRoute, navigate } from './router.js';
 import { store } from './store.js';
 import { STORAGE_KEYS } from './config.js';
 import { setOnUnauthorized } from './utils/http.js';
@@ -10,6 +10,7 @@ import { themeIcon } from './utils/icons.js';
 import { initLogin, renderLogin } from './ui/login.js';
 import { renderUserList } from './ui/userList.js';
 import { renderProfile } from './ui/profile.js';
+import { renderNewest } from './ui/newest.js';
 import { initSidebar, getSidebarToggleButton, closeSidebar } from './ui/sidebar.js';
 
 const root = $('#app');
@@ -74,7 +75,7 @@ function buildHeader() {
           el('path', { d: 'M19 7V4h-3M15 21H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4l2 2h5a2 2 0 0 1 2 2v1M11 16a3 3 0 1 0 0-6 3 3 0 0 0 0 6z' }),
         ]),
       ]),
-      el('span', { class: 'app-header-brand-text' }, 'TikSave Archive'),
+      el('span', { class: 'app-header-brand-text', onClick: () => navigate('/') }, 'TikSave Archive'),
     ]),
     el('div', { class: 'app-header-actions' }, [
       el('button', {
@@ -124,6 +125,7 @@ function showApp() {
 function handleRoute(path) {
   const main = $('#app-main');
   if (!main) return;
+  main.classList.remove('newest-active');
 
   const p = path.replace(/\/$/, '') || '/';
 
@@ -131,6 +133,10 @@ function handleRoute(path) {
   if (p === '' || p === '/') { renderUserList(main); return; }
   if (p.startsWith('profile/')) {
     renderProfile(main, p.slice(8));
+    return;
+  }
+  if (p === 'newest') {
+    renderNewest(main);
   }
 }
 

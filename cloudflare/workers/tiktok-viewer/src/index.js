@@ -2,7 +2,11 @@
  * TikTok Archive Viewer — CORS Proxy Worker
  *
  * Proxies requests to Hugging Face Hub API for any dataset.
+ * Recommendation.json requests with ?page/?item/?sort are handled
+ * by the recommendation module (paginated/lookup/sorted responses).
  */
+
+import { handleRecommendation } from "./recommendation.js";
 
 const HF_BASE = "https://huggingface.co";
 
@@ -54,6 +58,13 @@ export default {
     headers.delete("Referer");
     headers.set("Host", "huggingface.co");
     headers.set("Origin", HF_BASE);
+
+    // ── recommendation.json handler (supports ?page, ?item, ?sort) ──
+    if (url.pathname.includes("recommendation.json")) {
+      const recResp = await handleRecommendation(url, headers, ctx);
+      if (recResp) return recResp;
+      // null → no special params, fall through to proxy
+    }
 
     try {
       const response = await fetch(targetUrl, {

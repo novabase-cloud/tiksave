@@ -14,8 +14,9 @@ let containerEl = null;
 let userListEl = null;
 let isOpen = false;
 let allUsers = [];
-let searchTerm = '';
-
+let drawerOpen = false;
+let drawerEl = null;
+let searchInputEl = null;
 
 export function getSidebar() {
   return sidebarEl;
@@ -45,7 +46,101 @@ export function getSidebarToggleButton() {
   }, [icon(HAMBURGER_ICON, 20)]);
 }
 
-/* ── Lazy-loaded Sidebar User List ── */
+function closeDrawer() {
+  drawerOpen = false;
+  if (drawerEl) {
+    drawerEl.remove();
+    drawerEl = null;
+  }
+  if (searchInputEl) searchInputEl.value = '';
+}
+
+function openDrawer() {
+  if (drawerOpen) return;
+  drawerOpen = true;
+
+  drawerEl = el('div', { class: 'sidebar-drawer-backdrop', onClick: closeDrawer });
+
+  const drawerInner = el('div', { class: 'sidebar-drawer', onClick: (e) => e.stopPropagation() });
+
+  const drawerSearch = el('input', {
+    class: 'sidebar-drawer-input',
+    type: 'text',
+    placeholder: 'Search users...',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    onInput: function () {
+      renderDrawerResults(this.value);
+    },
+    onKeydown: (e) => {
+      if (e.key === 'Escape') closeDrawer();
+    },
+  });
+
+  const resultsEl = el('div', { class: 'sidebar-drawer-results' });
+
+  drawerInner.appendChild(drawerSearch);
+  drawerInner.appendChild(resultsEl);
+  drawerEl.appendChild(drawerInner);
+  document.body.appendChild(drawerEl);
+
+  requestAnimationFrame(() => {
+    drawerSearch.focus();
+    renderDrawerResults('');
+  });
+
+  function renderDrawerResults(q) {
+    clear(resultsEl);
+    const term = q.toLowerCase().trim();
+    const filtered = !term
+      ? allUsers
+      : allUsers.filter(u => u.username.toLowerCase().includes(term) || u.uid.toLowerCase().includes(term));
+
+    if (!filtered.length) {
+      resultsEl.appendChild(el('div', { class: 'sidebar-drawer-empty' }, ['No users found']));
+      return;
+    }
+
+    for (const user of filtered.slice(0, 50)) {
+      const displayName = user.username;
+      const item = el('div', {
+        class: 'sidebar-drawer-item',
+        'data-uid': user.uid,
+        'data-username': displayName,
+        onClick: () => {
+          closeDrawer();
+          closeSidebar();
+          navigate(`/profile/${user.uid}`);
+        },
+      }, [
+        el('div', { class: 'sidebar-drawer-item-avatar' }, [
+          el('span', {}, [(displayName[0] || '?').toUpperCase()]),
+        ]),
+        el('div', { class: 'sidebar-drawer-item-info' }, [
+          el('span', { class: 'sidebar-drawer-item-name' }, [`@${displayName}`]),
+          user.nickname && user.nickname !== displayName
+            ? el('span', { class: 'sidebar-drawer-item-nick' }, [user.nickname])
+            : null,
+        ]),
+      ]);
+
+      fetchUserAvatarUrl(displayName).then(url => {
+        if (!url || !item.isConnected) return;
+        const avatarEl = item.querySelector('.sidebar-drawer-item-avatar');
+        if (!avatarEl) return;
+        loadResizedImage(url, 48).then(dataUrl => {
+          if (!dataUrl || !avatarEl.isConnected) return;
+          avatarEl.innerHTML = '';
+          avatarEl.appendChild(el('img', { style: { width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }, src: dataUrl, alt: displayName }));
+        });
+      });
+
+      resultsEl.appendChild(item);
+    }
+  }
+}
+
+/* ── Lazy-loaded Sidebar User List (always shows all users) ── */
 
 function createUserItem(displayName, uid) {
   const isActive = store.state.currentUser === uid;
@@ -62,19 +157,11 @@ function createUserItem(displayName, uid) {
   ]);
 }
 
-function filterUsers(users, term) {
-  if (!term.trim()) return users;
-  const q = term.toLowerCase();
-  return users.filter(u => u.username.toLowerCase().includes(q));
-}
-
-function startLazyLoad(users) {
+function startLazyLoad() {
   let idx = 0;
-  const filtered = filterUsers(users, searchTerm);
-
   clear(userListEl);
 
-  if (!filtered.length) {
+  if (!allUsers.length) {
     userListEl.appendChild(el('div', { class: 'sidebar-empty' }, ['No users found']));
     return;
   }
@@ -102,7 +189,7 @@ function startLazyLoad(users) {
   }, { root: userListEl, rootMargin: '200px' });
 
   const loadBatch = () => {
-    const batch = filtered.slice(idx, idx + BATCH);
+    const batch = allUsers.slice(idx, idx + BATCH);
     if (!batch.length) { sentinel.style.display = 'none'; return; }
     idx += BATCH;
 
@@ -121,9 +208,8 @@ function startLazyLoad(users) {
   loadBatch();
 }
 
-function handleSearchInput() {
-  searchTerm = this.value;
-  startLazyLoad(allUsers);
+function handleSearchFocus() {
+  openDrawer();
 }
 
 export async function initSidebar(container) {
@@ -137,23 +223,40 @@ export async function initSidebar(container) {
     }, ['✕']),
   ]);
 
+  searchInputEl = el('input', {
+    class: 'sidebar-search-input',
+    type: 'text',
+    placeholder: 'Search users...',
+    autocomplete: 'off',
+    spellcheck: 'false',
+    onFocus: handleSearchFocus,
+  });
+
   const searchBar = el('div', { class: 'sidebar-search' }, [
     el('div', { class: 'sidebar-search-wrapper' }, [
       el('span', { class: 'sidebar-search-icon' }, [
         icon('M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35', 16),
       ]),
-      el('input', {
-        class: 'sidebar-search-input',
-        type: 'text',
-        placeholder: 'Search users...',
-        onInput: handleSearchInput,
-      }),
+      searchInputEl,
     ]),
+  ]);
+
+  const newestBtn = el('button', {
+    class: 'sidebar-theme-btn',
+    onClick: () => {
+      closeSidebar();
+      navigate('/newest');
+    },
+  }, [
+    icon('M13 2L3 14h9l-1 8 10-12h-9l1-8z', 16),
+    el('span', {}, 'Newest'),
   ]);
 
   userListEl = el('div', { class: 'sidebar-user-list' });
   sidebarEl.appendChild(headerRow);
   sidebarEl.appendChild(searchBar);
+  sidebarEl.appendChild(el('div', { class: 'sidebar-footer' }, [newestBtn]));
+  sidebarEl.appendChild(el('div', { class: 'sidebar-footer-sep' }));
   sidebarEl.appendChild(userListEl);
 
   const backdrop = el('div', {
@@ -200,7 +303,7 @@ export async function initSidebar(container) {
     allUsers = await listUsers();
     allUsers.sort((a, b) => a.username.localeCompare(b.username));
     store.set({ users: allUsers, loading: false });
-    startLazyLoad(allUsers);
+    startLazyLoad();
   } catch (err) {
     mount(userListEl, el('div', { class: 'sidebar-empty' }, ['Failed to load users']));
   }

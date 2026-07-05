@@ -30,7 +30,8 @@ export async function renderUserList(container) {
         const cards = grid.querySelectorAll('.user-card');
         for (const card of cards) {
           const name = (card.dataset.username || '').toLowerCase();
-          card.style.display = (!q || name.includes(q)) ? '' : 'none';
+          const uid = (card.dataset.uid || '').toLowerCase();
+          card.style.display = (!q || name.includes(q) || uid.includes(q)) ? '' : 'none';
         }
       },
     }),
@@ -60,6 +61,7 @@ export async function renderUserList(container) {
       const card = el('div', {
         class: 'user-card',
         'data-username': displayName,
+        'data-uid': user.uid,
         onClick: () => navigate(`/profile/${user.uid}`),
       }, [
         el('div', { class: 'user-card-avatar-placeholder' }, [displayName[0]?.toUpperCase() || '?']),
