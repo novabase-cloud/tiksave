@@ -119,6 +119,10 @@ export async function loginWithCode(code) {
   }
 }
 
+export function resetCachedToken() {
+  cachedToken = null;
+}
+
 export function logout() {
   const token = cachedToken || getToken();
   cachedToken = null;

@@ -1,7 +1,7 @@
 export const HF_API = 'https://huggingface.co';
 
 // Worker — proxy semua request ke HF + CORS + redirect follow
-const WORKER = 'https://novabase-cloud.mailtestvartext.workers.dev';
+const WORKER = 'https://api-tiksave.mailtestvartext.workers.dev';
 export const HF_API_BASE = `${WORKER}/api`;
 export const HF_MEDIA_PROXY = WORKER;
 

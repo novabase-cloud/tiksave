@@ -14,9 +14,8 @@ let containerEl = null;
 let userListEl = null;
 let isOpen = false;
 let allUsers = [];
-let drawerOpen = false;
-let drawerEl = null;
 let searchInputEl = null;
+let searchResultsEl = null;
 
 export function getSidebar() {
   return sidebarEl;
@@ -46,98 +45,84 @@ export function getSidebarToggleButton() {
   }, [icon(HAMBURGER_ICON, 20)]);
 }
 
-function closeDrawer() {
-  drawerOpen = false;
-  if (drawerEl) {
-    drawerEl.remove();
-    drawerEl = null;
+function closeInlineResults() {
+  if (searchResultsEl) {
+    clear(searchResultsEl);
+    searchResultsEl.style.display = 'none';
   }
   if (searchInputEl) searchInputEl.value = '';
 }
 
-function openDrawer() {
-  if (drawerOpen) return;
-  drawerOpen = true;
+function renderInlineResults(q) {
+  clear(searchResultsEl);
+  const term = q.toLowerCase().trim();
 
-  drawerEl = el('div', { class: 'sidebar-drawer-backdrop', onClick: closeDrawer });
-
-  const drawerInner = el('div', { class: 'sidebar-drawer', onClick: (e) => e.stopPropagation() });
-
-  const drawerSearch = el('input', {
-    class: 'sidebar-drawer-input',
-    type: 'text',
-    placeholder: 'Search users...',
-    autocomplete: 'off',
-    spellcheck: 'false',
-    onInput: function () {
-      renderDrawerResults(this.value);
-    },
-    onKeydown: (e) => {
-      if (e.key === 'Escape') closeDrawer();
-    },
-  });
-
-  const resultsEl = el('div', { class: 'sidebar-drawer-results' });
-
-  drawerInner.appendChild(drawerSearch);
-  drawerInner.appendChild(resultsEl);
-  drawerEl.appendChild(drawerInner);
-  document.body.appendChild(drawerEl);
-
-  requestAnimationFrame(() => {
-    drawerSearch.focus();
-    renderDrawerResults('');
-  });
-
-  function renderDrawerResults(q) {
-    clear(resultsEl);
-    const term = q.toLowerCase().trim();
-    const filtered = !term
-      ? allUsers
-      : allUsers.filter(u => u.username.toLowerCase().includes(term) || u.uid.toLowerCase().includes(term));
-
-    if (!filtered.length) {
-      resultsEl.appendChild(el('div', { class: 'sidebar-drawer-empty' }, ['No users found']));
-      return;
-    }
-
-    for (const user of filtered.slice(0, 50)) {
-      const displayName = user.username;
-      const item = el('div', {
-        class: 'sidebar-drawer-item',
-        'data-uid': user.uid,
-        'data-username': displayName,
-        onClick: () => {
-          closeDrawer();
-          closeSidebar();
-          navigate(`/profile/${user.uid}`);
-        },
-      }, [
-        el('div', { class: 'sidebar-drawer-item-avatar' }, [
-          el('span', {}, [(displayName[0] || '?').toUpperCase()]),
-        ]),
-        el('div', { class: 'sidebar-drawer-item-info' }, [
-          el('span', { class: 'sidebar-drawer-item-name' }, [`@${displayName}`]),
-          user.nickname && user.nickname !== displayName
-            ? el('span', { class: 'sidebar-drawer-item-nick' }, [user.nickname])
-            : null,
-        ]),
-      ]);
-
-      fetchUserAvatarUrl(displayName).then(url => {
-        if (!url || !item.isConnected) return;
-        const avatarEl = item.querySelector('.sidebar-drawer-item-avatar');
-        if (!avatarEl) return;
-        loadResizedImage(url, 48).then(dataUrl => {
-          if (!dataUrl || !avatarEl.isConnected) return;
-          avatarEl.innerHTML = '';
-          avatarEl.appendChild(el('img', { style: { width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }, src: dataUrl, alt: displayName }));
-        });
-      });
-
-      resultsEl.appendChild(item);
-    }
+  if (!term) {
+    searchResultsEl.style.display = 'none';
+    return;
   }
+
+  const filtered = allUsers.filter(u =>
+    u.username.toLowerCase().includes(term) ||
+    (u.nickname || '').toLowerCase().includes(term) ||
+    u.uid.toLowerCase().includes(term)
+  );
+
+  if (!filtered.length) {
+    searchResultsEl.appendChild(el('div', { class: 'sidebar-search-empty' }, ['No users found']));
+    positionSearchResults();
+    searchResultsEl.style.display = 'block';
+    return;
+  }
+
+  positionSearchResults();
+  searchResultsEl.style.display = 'block';
+
+  for (const user of filtered.slice(0, 50)) {
+    const displayName = user.username;
+    const item = el('div', {
+      class: 'sidebar-search-item',
+      'data-uid': user.uid,
+      'data-username': displayName,
+      onClick: () => {
+        closeInlineResults();
+        closeSidebar();
+        navigate(`/profile/${user.uid}`);
+      },
+    }, [
+      el('div', { class: 'sidebar-search-item-avatar' }, [
+        el('span', {}, [(displayName[0] || '?').toUpperCase()]),
+      ]),
+      el('div', { class: 'sidebar-search-item-info' }, [
+        el('span', { class: 'sidebar-search-item-name' }, [`@${displayName}`]),
+        user.nickname && user.nickname !== displayName
+          ? el('span', { class: 'sidebar-search-item-nick' }, [user.nickname])
+          : null,
+      ]),
+    ]);
+
+    fetchUserAvatarUrl(displayName).then(url => {
+      if (!url || !item.isConnected) return;
+      const avatarEl = item.querySelector('.sidebar-search-item-avatar');
+      if (!avatarEl) return;
+      loadResizedImage(url, 48).then(dataUrl => {
+        if (!dataUrl || !avatarEl.isConnected) return;
+        avatarEl.innerHTML = '';
+        avatarEl.appendChild(el('img', { style: { width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }, src: dataUrl, alt: displayName }));
+      });
+    });
+
+    searchResultsEl.appendChild(item);
+  }
+}
+
+function positionSearchResults() {
+  if (!searchInputEl || !searchResultsEl) return;
+  const rect = searchInputEl.getBoundingClientRect();
+  if (!rect.width) return;
+  searchResultsEl.style.top = (rect.bottom + 4) + 'px';
+  searchResultsEl.style.left = rect.left + 'px';
+  searchResultsEl.style.width = rect.width + 'px';
 }
 
 /* ── Lazy-loaded Sidebar User List (always shows all users) ── */
@@ -208,10 +193,6 @@ function startLazyLoad() {
   loadBatch();
 }
 
-function handleSearchFocus() {
-  openDrawer();
-}
-
 export async function initSidebar(container) {
   containerEl = container;
   sidebarEl = el('aside', { class: 'sidebar' });
@@ -229,7 +210,12 @@ export async function initSidebar(container) {
     placeholder: 'Search users...',
     autocomplete: 'off',
     spellcheck: 'false',
-    onFocus: handleSearchFocus,
+    onInput: function () {
+      renderInlineResults(this.value);
+    },
+    onKeydown: (e) => {
+      if (e.key === 'Escape') closeInlineResults();
+    },
   });
 
   const searchBar = el('div', { class: 'sidebar-search' }, [
@@ -240,6 +226,20 @@ export async function initSidebar(container) {
       searchInputEl,
     ]),
   ]);
+
+  searchResultsEl = el('div', { class: 'sidebar-search-results', style: { display: 'none' } });
+  document.body.appendChild(searchResultsEl);
+
+  window.addEventListener('scroll', positionSearchResults, true);
+  window.addEventListener('resize', positionSearchResults);
+
+  document.addEventListener('click', (e) => {
+    if (searchResultsEl && searchResultsEl.style.display !== 'none') {
+      if (!searchResultsEl.contains(e.target) && e.target !== searchInputEl) {
+        closeInlineResults();
+      }
+    }
+  });
 
   const newestBtn = el('button', {
     class: 'sidebar-theme-btn',

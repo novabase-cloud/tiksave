@@ -1,5 +1,5 @@
 import { $, el, mount } from './utils/dom.js';
-import { isAuthenticated, loginWithCode, validateToken, logout, getUserInfo } from './auth.js';
+import { isAuthenticated, loginWithCode, validateToken, logout, getUserInfo, resetCachedToken } from './auth.js';
 import { initRouter, onRoute, navigate } from './router.js';
 import { store } from './store.js';
 import { STORAGE_KEYS } from './config.js';
@@ -7,10 +7,11 @@ import { setOnUnauthorized } from './utils/http.js';
 import { clearUserListCache } from './api.js';
 import { initTheme, isDark, toggleTheme } from './utils/theme.js';
 import { themeIcon } from './utils/icons.js';
+import { cacheClear } from './utils/cache.js';
 import { initLogin, renderLogin } from './ui/login.js';
 import { renderUserList } from './ui/userList.js';
-import { renderProfile } from './ui/profile.js';
-import { renderNewest } from './ui/newest.js';
+import { renderProfile, resetProfileQueue } from './ui/profile.js';
+import { renderNewest, resetNewestCache } from './ui/newest.js';
 import { initSidebar, getSidebarToggleButton, closeSidebar } from './ui/sidebar.js';
 
 const root = $('#app');
@@ -137,6 +138,7 @@ function handleRoute(path) {
   }
   if (p === 'newest') {
     renderNewest(main);
+    return;
   }
 }
 
@@ -206,7 +208,17 @@ async function verifyAuthOnStartup() {
   }
 }
 
+function clearAllCaches() {
+  cacheClear();
+  clearUserListCache();
+  resetCachedToken();
+  resetProfileQueue();
+  resetNewestCache();
+  store.reset();
+}
+
 function bootstrap() {
+  clearAllCaches();
   initTheme();
   setOnUnauthorized(() => {
     if (localStorage.getItem(STORAGE_KEYS.GUEST_MODE) === 'true') return;

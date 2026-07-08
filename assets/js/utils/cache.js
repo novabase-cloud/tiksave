@@ -51,7 +51,7 @@ export async function loadResizedImage(url, w = 150, q = 80) {
   const key = 'vrz:' + w + ':' + url;
   const cached = cacheGet(key);
   if (cached) return cached;
-  const hfUrl = url.replace('novabase-cloud.mailtestvartext.workers.dev', 'huggingface.co');
+  const hfUrl = url.replace('api-tiksave.mailtestvartext.workers.dev', 'huggingface.co').replace('/proxy/', '/');
   const qIdx = hfUrl.indexOf('?token=');
   const baseUrl = qIdx === -1 ? hfUrl : hfUrl.slice(0, qIdx);
   const token = qIdx === -1 ? '' : hfUrl.slice(qIdx + 7).split('&')[0];

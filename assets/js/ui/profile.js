@@ -12,6 +12,11 @@ const MAX_CONCURRENT = 4;
 let _pending = 0;
 const _queue = [];
 
+export function resetProfileQueue() {
+  _queue.length = 0;
+  _pending = 0;
+}
+
 function _processQueue() {
   while (_pending < MAX_CONCURRENT && _queue.length > 0) {
     const next = _queue.shift();

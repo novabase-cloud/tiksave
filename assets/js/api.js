@@ -6,7 +6,7 @@ function resolveUrl(subPath) {
   const base = HF_MEDIA_PROXY || HF_API;
   const repo = getDatasetRepo();
   if (!repo) return null;
-  let url = `${base}/datasets/${repo}/resolve/main/${subPath}`;
+  let url = `${base}/proxy/datasets/${repo}/resolve/main/${subPath}`;
   const token = getToken();
   if (token) url += `?token=${encodeURIComponent(token)}`;
   return url;
