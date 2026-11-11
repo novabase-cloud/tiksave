@@ -4,10 +4,19 @@ on:
   schedule:
     - cron: '0 */5 * * *' # Backup trigger every 5 hours
   workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: 'Duration in minutes to run before recalling (default: 300)'
+        required: false
+        default: '300'
 
 concurrency:
   group: backend-runner
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   run-backend:
@@ -24,10 +33,43 @@ jobs:
           node-version: 20
 
       - name: Run Backend & Cloudflare Quick Tunnel
+        id: runner
         env:
           TELLER_URL: "https://api-tiksave.mailtestvartext.workers.dev"
           TELLER_SECRET: ${{ secrets.TELLER_SECRET || 'tiksave-teller-secret-2026' }}
-          GH_TOKEN: ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
+          PORT: 3000
+          MAX_LIFETIME_MINUTES: ${{ inputs.duration_minutes || '300' }}
         run: |
           chmod +x backend/runner.sh
           bash backend/runner.sh
+
+      - name: Recall Next Runner
+        if: success() || (always() && steps.runner.conclusion != 'cancelled')
+        env:
+          GH_PAT: ${{ secrets.GH_PAT || secrets.GH_TOKEN || secrets.TIKSAVE_WEB_DEPLOY_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "=========================================================="
+          echo "Current runner workflow complete. Recalling next runner..."
+          echo "=========================================================="
+          
+          if [ -z "$GH_PAT" ]; then
+            echo "::error::GH_PAT secret is missing! Cannot trigger recall."
+            exit 1
+          fi
+
+          HTTP_CODE=$(curl -s -o /tmp/dispatch_resp.txt -w "%{http_code}" -X POST \
+            -H "Authorization: token $GH_PAT" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/$REPO/actions/workflows/backend.yml/dispatches" \
+            -d '{"ref":"main"}')
+
+          echo "GitHub API Dispatch response code: $HTTP_CODE"
+          if [ "$HTTP_CODE" -eq 204 ]; then
+            echo "✅ Successfully recalled and dispatched next runner workflow!"
+          else
+            echo "❌ Recall failed with status $HTTP_CODE:"
+            cat /tmp/dispatch_resp.txt || true
+            exit 1
+          fi

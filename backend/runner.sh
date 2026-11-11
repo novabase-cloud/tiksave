@@ -8,7 +8,7 @@ TELLER_URL="${TELLER_URL:-https://api-tiksave.mailtestvartext.workers.dev}"
 TELLER_SECRET="${TELLER_SECRET:-tiksave-teller-secret-2026}"
 PORT="${PORT:-3000}"
 HEARTBEAT_INTERVAL=600 # 10 minutes
-MAX_LIFETIME_MINUTES=330 # 5.5 hours (trigger next runner before 6h limit)
+MAX_LIFETIME_MINUTES="${MAX_LIFETIME_MINUTES:-300}" # 5 hours default
 
 # 1. Install dependencies & ensure ffmpeg
 echo "[1/4] Ensuring ffmpeg & installing backend dependencies..."
@@ -80,10 +80,9 @@ send_heartbeat() {
 # Initial Registration
 send_heartbeat
 
-# 4. Long-running Heartbeat and Self-Rotation Loop
-echo "[4/4] Entering heartbeat and maintenance loop (interval: ${HEARTBEAT_INTERVAL}s)..."
+# 4. Long-running Heartbeat Loop
+echo "[4/4] Serving traffic & heartbeating every ${HEARTBEAT_INTERVAL}s (Max runtime: ${MAX_LIFETIME_MINUTES}m)..."
 START_TIME=$(date +%s)
-ROTATION_TRIGGERED=0
 
 while true; do
   sleep $HEARTBEAT_INTERVAL
@@ -97,45 +96,24 @@ while true; do
     sleep 3
   fi
 
-  # Send heartbeat
+  # Send heartbeat to Teller
   send_heartbeat
 
-  # Check lifetime for self-rotation
+  # Check session uptime
   CURRENT_TIME=$(date +%s)
   ELAPSED_MINUTES=$(( (CURRENT_TIME - START_TIME) / 60 ))
-  echo "[Status] Runner uptime: ${ELAPSED_MINUTES} minutes / max ${MAX_LIFETIME_MINUTES} minutes"
+  echo "[Status] Runner uptime: ${ELAPSED_MINUTES}m / target: ${MAX_LIFETIME_MINUTES}m"
 
-  if [ $ELAPSED_MINUTES -ge $MAX_LIFETIME_MINUTES ] && [ $ROTATION_TRIGGERED -eq 0 ]; then
+  if [ $ELAPSED_MINUTES -ge $MAX_LIFETIME_MINUTES ]; then
     echo "=========================================================="
-    echo "Lifetime reached ($ELAPSED_MINUTES min). Triggering next runner via GitHub API..."
+    echo "Session target reached (${ELAPSED_MINUTES}m / ${MAX_LIFETIME_MINUTES}m)."
+    echo "Shutting down runner cleanly so workflow can recall the next runner..."
     echo "=========================================================="
-    
-    if [ -n "$GH_TOKEN" ]; then
-      REPO="${GITHUB_REPOSITORY:-novabase-cloud/tiksave}"
-      WORKFLOW="${GITHUB_WORKFLOW_REF:-backend.yml}"
-      # Strip ref suffix if present
-      WORKFLOW_FILE="backend.yml"
-
-      TRIGGER_RESP=$(curl -s -X POST \
-        -H "Authorization: token $GH_TOKEN" \
-        -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/$REPO/actions/workflows/$WORKFLOW_FILE/dispatches" \
-        -d '{"ref":"main"}' || true)
-      
-      echo "[Rotation Response]: $TRIGGER_RESP"
-      ROTATION_TRIGGERED=1
-      
-      # Allow 15 minutes for new runner to spin up and register its URL
-      echo "Waiting 15 minutes for new runner to take over smoothly..."
-      sleep 900
-      echo "Gracefully exiting to yield to new runner. Done."
-      break
-    else
-      echo "WARNING: GH_TOKEN not set, cannot trigger next runner automatically."
-    fi
+    break
   fi
 done
 
 kill $TUNNEL_PID 2>/dev/null || true
 kill $SERVER_PID 2>/dev/null || true
-echo "Runner shut down cleanly."
+echo "Runner processes stopped. Exiting cleanly."
+exit 0
