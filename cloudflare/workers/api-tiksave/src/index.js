@@ -1,6 +1,7 @@
 import { handleProxy } from "./proxy.js";
 import { handleRecommendation } from "./recommendation.js";
 import { handleFileTree } from "./filetree.js";
+import { handleTeller } from "./teller.js";
 import { corsHeaders } from "../utils/cors.js";
 
 export default {
@@ -12,6 +13,11 @@ export default {
     }
 
     const path = url.pathname;
+
+    // /teller → teller discovery and registration for GitHub Action runner backend
+    if (path === "/teller" || path.startsWith("/teller/")) {
+      return handleTeller(request, env, ctx);
+    }
 
     // /proxy/* → forward to Hugging Face
     if (path.startsWith("/proxy")) {
@@ -35,7 +41,7 @@ export default {
       JSON.stringify({
         error: "Unknown section",
         message: `No handler for path: ${path}`,
-        sections: ["/proxy/*", "/recommendation", "/filetree/*"],
+        sections: ["/teller", "/proxy/*", "/recommendation", "/filetree/*"],
       }),
       {
         status: 404,

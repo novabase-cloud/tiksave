@@ -1,7 +1,66 @@
-import { IMAGE_RESIZER } from '../config.js';
+import { IMAGE_RESIZER, TELLER_ENDPOINT } from '../config.js';
 
 const imageCache = new Map();
 const MAX_CACHE = 100;
+
+// Backend runner tunnel state
+const BACKEND_STORAGE_KEY = 'tiktok.backend.tunnel';
+let currentBackendUrl = typeof localStorage !== 'undefined' ? (localStorage.getItem(BACKEND_STORAGE_KEY) || null) : null;
+let lastTellerRequestTime = 0;
+const TELLER_COOLDOWN_MS = 3000; // 3 seconds delay between requests to avoid spam
+let tellerFetchPromise = null;
+
+export async function getBackendUrl(forceRefresh = false) {
+  const now = Date.now();
+
+  // Return cached backend if valid and not forcing refresh
+  if (!forceRefresh && currentBackendUrl) {
+    return currentBackendUrl;
+  }
+
+  // Enforce 3s delay before asking teller again to prevent spam
+  if (now - lastTellerRequestTime < TELLER_COOLDOWN_MS && currentBackendUrl) {
+    return currentBackendUrl;
+  }
+
+  // Deduplicate concurrent requests
+  if (tellerFetchPromise) {
+    return tellerFetchPromise;
+  }
+
+  lastTellerRequestTime = now;
+  tellerFetchPromise = (async () => {
+    try {
+      if (!TELLER_ENDPOINT) return null;
+      const resp = await fetch(TELLER_ENDPOINT, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (data && data.ok && data.url) {
+        const cleanUrl = data.url.replace(/\/+$/, '');
+        currentBackendUrl = cleanUrl;
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(BACKEND_STORAGE_KEY, cleanUrl);
+        }
+        return cleanUrl;
+      }
+      return null;
+    } catch (err) {
+      console.warn('[teller-client] Failed to get backend URL from teller:', err);
+      return null;
+    } finally {
+      tellerFetchPromise = null;
+    }
+  })();
+
+  return tellerFetchPromise;
+}
+
+export function invalidateBackendUrl() {
+  currentBackendUrl = null;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(BACKEND_STORAGE_KEY);
+  }
+}
 
 export function cacheGet(key) {
   if (!imageCache.has(key)) return null;
@@ -55,10 +114,59 @@ export async function loadResizedImage(url, w = 150, q = 80) {
   const qIdx = hfUrl.indexOf('?token=');
   const baseUrl = qIdx === -1 ? hfUrl : hfUrl.slice(0, qIdx);
   const token = qIdx === -1 ? '' : hfUrl.slice(qIdx + 7).split('&')[0];
+
+  function buildResizeUrl(host) {
+    let u = `${host}/api/resize?url=${encodeURIComponent(baseUrl)}&w=${w}&q=${q}`;
+    if (token) u += `&token=${encodeURIComponent(token)}`;
+    return u;
+  }
+
+  // 1. Try GitHub Action Runner backend first (via Teller discovery)
+  let backend = await getBackendUrl();
+  if (backend) {
+    try {
+      const resp = await fetch(buildResizeUrl(backend));
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const objUrl = URL.createObjectURL(blob);
+        cacheSet(key, objUrl);
+        return objUrl;
+      }
+      // If server returned 502/503/404, tunnel may have rotated/expired
+      if (resp.status >= 500 || resp.status === 404) {
+        invalidateBackendUrl();
+        backend = await getBackendUrl(true);
+        if (backend) {
+          const retryResp = await fetch(buildResizeUrl(backend));
+          if (retryResp.ok) {
+            const blob = await retryResp.blob();
+            const objUrl = URL.createObjectURL(blob);
+            cacheSet(key, objUrl);
+            return objUrl;
+          }
+        }
+      }
+    } catch {
+      // Network error: tunnel dead or expired. Refresh with 3s debounce
+      invalidateBackendUrl();
+      backend = await getBackendUrl(true);
+      if (backend) {
+        try {
+          const retryResp = await fetch(buildResizeUrl(backend));
+          if (retryResp.ok) {
+            const blob = await retryResp.blob();
+            const objUrl = URL.createObjectURL(blob);
+            cacheSet(key, objUrl);
+            return objUrl;
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 2. Fallback to Vercel image resizer if runner is not available
   try {
-    let vercelUrl = `${IMAGE_RESIZER}/api/resize?url=${encodeURIComponent(baseUrl)}&w=${w}&q=${q}`;
-    if (token) vercelUrl += `&token=${encodeURIComponent(token)}`;
-    const vResp = await fetch(vercelUrl);
+    const vResp = await fetch(buildResizeUrl(IMAGE_RESIZER));
     if (!vResp.ok) return null;
     const blob = await vResp.blob();
     const objUrl = URL.createObjectURL(blob);

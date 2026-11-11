@@ -4,6 +4,7 @@ export const HF_API = 'https://huggingface.co';
 const WORKER = 'https://api-tiksave.mailtestvartext.workers.dev';
 export const HF_API_BASE = `${WORKER}/api`;
 export const HF_MEDIA_PROXY = WORKER;
+export const TELLER_ENDPOINT = `${WORKER}/teller`;
 
 // Kalau worker mati, fallback langsung ke HF:
 // export const HF_API_BASE = 'https://huggingface.co/api';
