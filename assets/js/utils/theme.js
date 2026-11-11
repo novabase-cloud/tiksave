@@ -28,12 +28,17 @@ function applyTheme(theme) {
 }
 
 export function getStoredTheme() {
-  return readStored() || 'light';
+  return readStored() || 'auto';
 }
 
 export function initTheme() {
   const stored = readStored();
-  applyTheme(stored || 'light');
+  applyTheme(stored || 'auto');
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if ((readStored() || 'auto') === 'auto') applyTheme('auto');
+    });
+  }
 }
 
 export function toggleTheme() {

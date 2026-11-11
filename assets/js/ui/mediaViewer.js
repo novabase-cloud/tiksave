@@ -78,7 +78,7 @@ class MediaViewer {
   }
 
   formatSize(bytes) {
-    if (!bytes) return '\u2014';
+    if (!bytes) return '';
     const units = ['B', 'KB', 'MB', 'GB'];
     let i = 0;
     let size = bytes;
@@ -115,8 +115,10 @@ class MediaViewer {
 
     const closeBtn = el('button', {
       class: 'media-viewer-close',
+      title: 'Close viewer',
+      'aria-label': 'Close viewer',
       onClick: () => this.close(),
-    }, ['\u2715']);
+    }, [icon(ICONS.close, 18)]);
 
     const myGen = this.renderGen;
 
@@ -125,10 +127,10 @@ class MediaViewer {
       : this.buildCachedImage(item.url, item.name, myGen);
 
     const prevMedia = this.mediaIdx > 0
-      ? el('button', { class: 'media-viewer-nav-prev', onClick: () => { this.mediaIdx--; this.render(); } }, ['\u2039'])
+      ? el('button', { class: 'media-viewer-nav-prev', 'aria-label': 'Previous media', onClick: () => { this.mediaIdx--; this.render(); } }, [icon(ICONS.chevronLeft, 18)])
       : null;
     const nextMedia = this.mediaIdx < totalMedia - 1
-      ? el('button', { class: 'media-viewer-nav-next', onClick: () => { this.mediaIdx++; this.render(); } }, ['\u203A'])
+      ? el('button', { class: 'media-viewer-nav-next', 'aria-label': 'Next media', onClick: () => { this.mediaIdx++; this.render(); } }, [icon(ICONS.chevronRight, 18)])
       : null;
 
     const mediaWrap = el('div', { class: 'media-viewer-media-wrap' }, [
@@ -157,10 +159,10 @@ class MediaViewer {
 
     const sideNav = el('div', { class: 'media-viewer-nav-side' }, [
       this.postIdx > 0
-        ? el('button', { class: 'media-viewer-nav-btn', onClick: () => { this.postIdx--; this.mediaIdx = 0; this.render(); } }, ['\u25B2'])
+        ? el('button', { class: 'media-viewer-nav-btn', 'aria-label': 'Previous post', onClick: () => { this.postIdx--; this.mediaIdx = 0; this.render(); } }, [icon(ICONS.chevronUp, 18)])
         : null,
       this.postIdx < totalPosts - 1
-        ? el('button', { class: 'media-viewer-nav-btn', onClick: () => { this.postIdx++; this.mediaIdx = 0; this.render(); } }, ['\u25BC'])
+        ? el('button', { class: 'media-viewer-nav-btn', 'aria-label': 'Next post', onClick: () => { this.postIdx++; this.mediaIdx = 0; this.render(); } }, [icon(ICONS.chevronDown, 18)])
         : null,
     ].filter(Boolean));
 
@@ -285,7 +287,7 @@ class MediaViewer {
       ['media-info-row-plays', ICONS.play, 'plays:'],
       ['media-info-row-comments', ICONS.messageCircle, 'comments:'],
       ['media-info-row-shares', ICONS.share, 'shares:'],
-      ['media-info-row-saves', ICONS.star, 'saves:'],
+      ['media-info-row-saves', ICONS.bookmark, 'saves:'],
       ['media-info-row-caption', ICONS.fileText, 'caption:'],
       ['media-info-row-hashtags', ICONS.hash, 'hashtags:'],
       ['media-info-row-music', ICONS.music, 'music:'],
@@ -295,7 +297,7 @@ class MediaViewer {
     return items.map(([cls, path, text]) =>
       el('div', { class: `media-info-row ${cls}` }, [
         this.infoLabel(path, text),
-        el('span', { class: 'media-info-value media-info-placeholder' }, '\u2014'),
+        el('span', { class: 'media-info-value media-info-placeholder' }, ''),
       ])
     );
   }
@@ -315,24 +317,24 @@ class MediaViewer {
       : null;
     const existing = this.backdrop?.querySelector('.media-info-row-posted');
 
-    this.setRowValue('media-info-row-likes', stats.diggCount != null ? formatNumber(stats.diggCount) : '\u2014');
-    this.setRowValue('media-info-row-plays', stats.playCount != null ? formatNumber(stats.playCount) : '\u2014');
-    this.setRowValue('media-info-row-comments', stats.commentCount != null ? String(stats.commentCount) : '\u2014');
-    this.setRowValue('media-info-row-shares', stats.shareCount != null ? String(stats.shareCount) : '\u2014');
-    this.setRowValue('media-info-row-saves', stats.collectCount != null ? String(stats.collectCount) : '\u2014');
-    this.setRowValue('media-info-row-caption', desc || '\u2014');
-    this.setRowValue('media-info-row-hashtags', tags.length ? '#' + tags.join(' #') : '\u2014');
+    this.setRowValue('media-info-row-likes', stats.diggCount != null ? formatNumber(stats.diggCount) : '');
+    this.setRowValue('media-info-row-plays', stats.playCount != null ? formatNumber(stats.playCount) : '');
+    this.setRowValue('media-info-row-comments', stats.commentCount != null ? String(stats.commentCount) : '');
+    this.setRowValue('media-info-row-shares', stats.shareCount != null ? String(stats.shareCount) : '');
+    this.setRowValue('media-info-row-saves', stats.collectCount != null ? String(stats.collectCount) : '');
+    this.setRowValue('media-info-row-caption', desc || '');
+    this.setRowValue('media-info-row-hashtags', tags.length ? '#' + tags.join(' #') : '');
 
     const musicStr = (musicTitle || musicAuthor)
-      ? [musicAuthor ? `${musicAuthor} \u2014 ` : '', musicTitle].filter(Boolean).join('')
-      : '\u2014';
+      ? [musicAuthor ? `${musicAuthor} · ` : '', musicTitle].filter(Boolean).join('')
+      : '';
     this.setRowValue('media-info-row-music', musicStr);
 
     if (dateStr && !existing) {
       this.setRowValue('media-info-row-posted-desc', dateStr);
     }
 
-    this.setRowValue('media-info-row-author-followers', authorStats.followerCount != null ? formatNumber(authorStats.followerCount) : '\u2014');
+    this.setRowValue('media-info-row-author-followers', authorStats.followerCount != null ? formatNumber(authorStats.followerCount) : '');
   }
 
   setRowValue(cls, value) {

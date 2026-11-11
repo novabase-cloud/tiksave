@@ -1,4 +1,4 @@
-import { el, clear } from '../utils/dom.js';
+import { el, icon, clear } from '../utils/dom.js';
 import { HF_MEDIA_PROXY, getDatasetRepo } from '../config.js';
 import { getToken } from '../auth.js';
 import { fetchJSON } from '../utils/http.js';
@@ -83,6 +83,12 @@ function formatDateDDMMYY(ts) {
   return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getFullYear()).slice(-2)}`;
 }
 
+/* SVG play/pause: text glyphs (U+25B6/U+23F8) render inconsistently across platforms */
+const PLAY_SVG_LG = '<svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3l16 9-16 9V3z"/></svg>';
+const PAUSE_SVG_LG = '<svg width="52" height="52" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+const PLAY_SVG_SM = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 3l16 9-16 9V3z"/></svg>';
+const PAUSE_SVG_SM = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+
 function infoLabel(svgPath, text) {
   const svg = el('svg', { width: 12, height: 12, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', style: 'vertical-align:middle;margin-right:3px;' }, [
     el('path', { d: svgPath }),
@@ -96,7 +102,7 @@ function buildInfoPanel() {
     ['media-info-row-plays', ICONS.play, 'plays:'],
     ['media-info-row-comments', ICONS.messageCircle, 'comments:'],
     ['media-info-row-shares', ICONS.share, 'shares:'],
-    ['media-info-row-saves', ICONS.star, 'saves:'],
+    ['media-info-row-saves', ICONS.bookmark, 'saves:'],
     ['media-info-row-caption', ICONS.fileText, 'caption:'],
     ['media-info-row-hashtags', ICONS.hash, 'hashtags:'],
     ['media-info-row-music', ICONS.music, 'music:'],
@@ -107,7 +113,7 @@ function buildInfoPanel() {
   const children = rows.map(([cls, path, text]) =>
     el('div', { class: `media-info-row ${cls}` }, [
       infoLabel(path, text),
-      el('span', { class: 'media-info-value media-info-placeholder' }, '\u2014'),
+      el('span', { class: 'media-info-value media-info-placeholder' }, ''),
     ])
   );
 
@@ -131,7 +137,7 @@ function populateInfoPanel(entry) {
   function setVal(cls, val) {
     const row = infoPanelEl?.querySelector(`.${cls} .media-info-value`);
     if (!row) return;
-    row.textContent = val ?? '\u2014';
+    row.textContent = val ?? '';
     row.classList.remove('media-info-placeholder');
   }
 
@@ -143,7 +149,7 @@ function populateInfoPanel(entry) {
   setVal('media-info-row-caption', desc || null);
   setVal('media-info-row-hashtags', tags.length ? '#' + tags.join(' #') : null);
   const musicStr = (musicTitle || musicAuthor)
-    ? [musicAuthor ? `${musicAuthor} \u2014 ` : '', musicTitle].filter(Boolean).join('')
+    ? [musicAuthor ? `${musicAuthor} · ` : '', musicTitle].filter(Boolean).join('')
     : null;
   setVal('media-info-row-music', musicStr);
   setVal('media-info-row-posted', dateStr || null);
@@ -247,10 +253,12 @@ function buildMuteButton() {
   return el('button', {
     class: 'newest2-mute-btn',
     title: globalMuted ? 'Unmuted' : 'Muted',
+    'aria-label': globalMuted ? 'Sound is muted' : 'Sound is on',
     onClick: () => {
       globalMuted = !globalMuted;
       localStorage.setItem('newest-muted', String(globalMuted));
       muteBtn.title = globalMuted ? 'Unmuted' : 'Muted';
+      muteBtn.setAttribute('aria-label', globalMuted ? 'Sound is muted' : 'Sound is on');
       muteBtn.innerHTML = '';
       muteBtn.appendChild(
         globalMuted
@@ -305,9 +313,11 @@ function buildSlide(entry, index) {
 
     const wrap = el('div', { class: 'newest2-video-wrap' });
 
-    const flashBtn = el('div', { class: 'newest2-play-flash' }, ['\u25B6']);
+    const flashBtn = el('div', { class: 'newest2-play-flash' });
+    flashBtn.innerHTML = PLAY_SVG_LG;
     const timeEl = el('span', { class: 'newest2-time-display' }, '0:00 / 0:00');
-    const playBtnBottom = el('button', { class: 'newest2-play-btn-bottom' }, ['\u25B6']);
+    const playBtnBottom = el('button', { class: 'newest2-play-btn-bottom', 'aria-label': 'Play or pause' });
+    playBtnBottom.innerHTML = PLAY_SVG_SM;
     const seekBar = el('input', { type: 'range', class: 'newest2-seek-bar', min: '0', max: '100', value: '0', step: '0.1' });
     const bottomBar = el('div', { class: 'newest2-video-bottom' }, [playBtnBottom, seekBar, timeEl]);
     const controls = el('div', { class: 'newest2-video-controls' }, [bottomBar]);
@@ -366,14 +376,14 @@ function buildSlide(entry, index) {
     });
     video.addEventListener('timeupdate', syncTime);
     video.addEventListener('play', () => {
-      playBtnBottom.textContent = '\u23F8';
-      flashBtn.textContent = '\u23F8';
+      playBtnBottom.innerHTML = PAUSE_SVG_SM;
+      flashBtn.innerHTML = PAUSE_SVG_LG;
       flashBtn.classList.remove('newest2-play-flash-visible');
       showControls();
     });
     video.addEventListener('pause', () => {
-      playBtnBottom.textContent = '\u25B6';
-      flashBtn.textContent = '\u25B6';
+      playBtnBottom.innerHTML = PLAY_SVG_SM;
+      flashBtn.innerHTML = PLAY_SVG_LG;
       flashBtn.classList.add('newest2-play-flash-visible');
       if (hideTimer) clearTimeout(hideTimer);
       controls.classList.remove('newest2-controls-hidden');
@@ -409,17 +419,17 @@ function buildSlide(entry, index) {
     if (imgCount > 1) {
       const prevBtn = el('button', {
         class: 'media-viewer-nav-prev',
-        style: 'position:absolute;left:8px;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;border:none;cursor:pointer;z-index:10;transition:background 0.2s;line-height:1;',
+        'aria-label': 'Previous image',
         onClick: (e) => { e.stopPropagation(); navigateImage(index, -1); },
-      }, ['\u2039']);
+      }, [icon(ICONS.chevronLeft, 18)]);
       const nextBtn = el('button', {
         class: 'media-viewer-nav-next',
-        style: 'position:absolute;right:8px;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;border:none;cursor:pointer;z-index:10;transition:background 0.2s;line-height:1;',
+        'aria-label': 'Next image',
         onClick: (e) => { e.stopPropagation(); navigateImage(index, 1); },
-      }, ['\u203A']);
+      }, [icon(ICONS.chevronRight, 18)]);
       const counter = el('div', {
         class: 'media-viewer-counter',
-        style: 'position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);color:#fff;padding:3px 12px;border-radius:999px;font-size:12px;z-index:10;white-space:nowrap;',
+        style: 'position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:10;',
         'data-counter': '',
       }, [`1/${imgCount}`]);
 
@@ -639,22 +649,29 @@ function showEmpty(msg) {
 }
 
 function buildLayout() {
-  const closeBtn = el('button', { class: 'newest2-close', onClick: close }, ['\u2715']);
+  const closeBtn = el('button', {
+    class: 'newest2-close',
+    title: 'Close feed',
+    'aria-label': 'Close feed',
+    onClick: close,
+  }, [icon(ICONS.close, 18)]);
 
   infoPanelEl = buildInfoPanel();
 
   navUpBtn = el('button', {
     class: 'newest2-nav-btn',
     title: 'Previous (ArrowUp)',
+    'aria-label': 'Previous post',
     disabled: true,
     onClick: () => scrollToSlide(-1),
-  }, ['\u25B2']);
+  }, [icon(ICONS.chevronUp, 18)]);
   navDownBtn = el('button', {
     class: 'newest2-nav-btn',
     title: 'Next (ArrowDown)',
+    'aria-label': 'Next post',
     disabled: true,
     onClick: () => scrollToSlide(1),
-  }, ['\u25BC']);
+  }, [icon(ICONS.chevronDown, 18)]);
   const navSide = el('div', { class: 'newest2-nav-side' }, [navUpBtn, navDownBtn]);
 
   thumbContainer = el('div', { class: 'newest2-thumb-container' });

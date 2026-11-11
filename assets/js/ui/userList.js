@@ -1,11 +1,9 @@
 import { el, icon, clear, mount } from '../utils/dom.js';
 import { listUsers, fetchUserAvatarUrl } from '../api.js';
 import { store } from '../store.js';
-import { navigate } from '../router.js';
 import { loadResizedImage } from '../utils/cache.js';
 import { getDatasetRepo } from '../config.js';
-
-const FOLDER_ICON = '<path d="M2 6a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"></path>';
+import { ICONS } from '../utils/icons.js';
 
 export async function renderUserList(container) {
   clear(container);
@@ -19,8 +17,10 @@ export async function renderUserList(container) {
   const searchWrap = el('div', { class: 'user-search-wrap' }, [
     el('input', {
       type: 'text',
+      name: 'user-search',
       class: 'user-search-input',
       placeholder: 'Search users...',
+      'aria-label': 'Search users',
       autocomplete: 'off',
       spellcheck: 'false',
       onInput: function () {
@@ -46,10 +46,13 @@ export async function renderUserList(container) {
     store.set({ users, loading: false });
 
     if (!users.length) {
+      const noRepo = !getDatasetRepo();
       mount(gridWrap, el('div', { class: 'empty-state' }, [
-        el('div', { class: 'empty-state-icon' }, ['📁']),
-        el('h3', {}, 'No Users Found'),
-        el('p', {}, 'The archive does not contain any user data yet.'),
+        el('div', { class: 'empty-state-icon' }, [icon(ICONS.folder, 36)]),
+        el('h3', {}, noRepo ? 'No Archive Connected' : 'No Users Found'),
+        el('p', {}, noRepo
+          ? 'Guest mode has no dataset repository. Log in with Hugging Face to browse your archive.'
+          : 'The archive does not contain any user data yet.'),
       ]));
       return;
     }
@@ -58,11 +61,12 @@ export async function renderUserList(container) {
 
     for (const user of users) {
       const displayName = user.username;
-      const card = el('div', {
+      // Real hash link: keyboard reachable, middle-clickable, native navigation
+      const card = el('a', {
         class: 'user-card',
+        href: `#/profile/${user.uid}`,
         'data-username': displayName,
         'data-uid': user.uid,
-        onClick: () => navigate(`/profile/${user.uid}`),
       }, [
         el('div', { class: 'user-card-avatar-placeholder' }, [displayName[0]?.toUpperCase() || '?']),
         el('div', { class: 'user-card-name' }, [`@${displayName}`]),
@@ -90,7 +94,7 @@ export async function renderUserList(container) {
   } catch (err) {
     store.set({ loading: false, error: err.message });
     mount(gridWrap, el('div', { class: 'empty-state' }, [
-      el('div', { class: 'empty-state-icon' }, ['⚠️']),
+      el('div', { class: 'empty-state-icon' }, [icon(ICONS.alertTriangle, 36)]),
       el('h3', {}, 'Failed to Load Users'),
       el('p', {}, err.message),
       el('button', { class: 'btn btn-primary', onClick: () => renderUserList(container) }, 'Retry'),

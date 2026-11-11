@@ -61,6 +61,7 @@ export async function request(url, options = {}) {
 }
 
 export async function fetchJSON(url, options = {}) {
+  if (!url) return { ok: false, status: 0, data: null, raw: '', response: null };
   try {
     const response = await request(url, options);
     const text = await response.text();

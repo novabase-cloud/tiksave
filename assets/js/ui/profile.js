@@ -5,8 +5,7 @@ import { openMediaViewer } from './mediaViewer.js';
 import { generateVideoThumbnail } from '../utils/thumbUtils.js';
 import { loadResizedImage, loadCachedImage } from '../utils/cache.js';
 import { formatNumber } from '../utils/format.js';
-
-const PLAY_ICON = '<polygon points="5 3 19 12 5 21 5 3"/>';
+import { ICONS } from '../utils/icons.js';
 
 const MAX_CONCURRENT = 4;
 let _pending = 0;
@@ -99,7 +98,7 @@ export async function renderProfile(container, uid) {
 
     if (!items.length) {
       container.appendChild(el('div', { class: 'empty-state' }, [
-        el('div', { class: 'empty-state-icon' }, ['📸']),
+        el('div', { class: 'empty-state-icon' }, [icon(ICONS.camera, 36)]),
         el('h3', {}, 'No Posts Yet'),
         el('p', {}, 'This user has no archived content.'),
       ]));
@@ -147,21 +146,30 @@ export async function renderProfile(container, uid) {
 
       const card = el('div', {
         class: 'post-card',
+        role: 'button',
+        tabindex: '0',
+        'aria-label': `Open post by ${nickname || displayName}`,
         onClick: () => openMediaViewer(posts, postIdx, 0, {
           username: displayName,
           nickname,
           followers,
           userInfo,
         }),
+        onKeydown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            card.click();
+          }
+        },
       }, [
         imgEl,
-        isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(PLAY_ICON, 14)]) : null,
+        isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(ICONS.play, 13)]) : null,
         el('div', { class: 'post-card-stats' }, [
           diggCount != null ? el('span', { class: 'post-card-stat' }, [
-            '❤️ ', formatNumber(diggCount),
+            icon(ICONS.heart, 11), formatNumber(diggCount),
           ]) : null,
           playCount != null ? el('span', { class: 'post-card-stat' }, [
-            '▶️ ', formatNumber(playCount),
+            icon(ICONS.play, 11), formatNumber(playCount),
           ]) : null,
         ].filter(Boolean)),
       ]);
@@ -205,7 +213,7 @@ export async function renderProfile(container, uid) {
   } catch (err) {
     store.set({ loading: false, error: err.message });
     mount(container, el('div', { class: 'empty-state' }, [
-      el('div', { class: 'empty-state-icon' }, ['⚠️']),
+      el('div', { class: 'empty-state-icon' }, [icon(ICONS.alertTriangle, 36)]),
       el('h3', {}, 'Failed to Load Profile'),
       el('p', {}, err.message),
       el('button', {
@@ -240,7 +248,12 @@ function openAvatarPreview(avatarPath, username) {
     onKeydown: (e) => { if (e.key === 'Escape') closePreview(); },
     tabindex: '0',
   }, [
-    el('button', { class: 'avatar-preview-close', onClick: () => closePreview() }, ['✕']),
+    el('button', {
+      class: 'avatar-preview-close',
+      title: 'Close preview',
+      'aria-label': 'Close preview',
+      onClick: () => closePreview(),
+    }, [icon(ICONS.close, 18)]),
     img,
   ]);
   document.body.appendChild(backdrop);

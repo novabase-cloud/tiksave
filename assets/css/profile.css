@@ -1,13 +1,12 @@
-/* ── Profile Header (TikTok Style) ── */
+/* ── Profile Header ── */
 .profile-header {
   display: flex;
-  gap: 24px;
-  padding: 24px 20px;
+  gap: 28px;
+  padding: 28px 24px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  margin-bottom: 24px;
-  animation: slideUp 0.3s ease;
+  margin-bottom: 20px;
 }
 
 .profile-avatar-wrap {
@@ -15,133 +14,147 @@
 }
 
 .profile-avatar {
-  width: 172px;
-  height: 172px;
+  width: 164px;
+  height: 164px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid var(--color-border);
+  border: 1px solid var(--color-border);
   background: var(--color-bg-muted);
   cursor: pointer;
   display: block;
 }
 
 .profile-avatar:hover {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
 .profile-avatar-placeholder {
-  width: 172px;
-  height: 172px;
+  width: 164px;
+  height: 164px;
   border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-bg-muted);
+  color: var(--color-text-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 64px;
+  font-size: 56px;
   font-weight: 700;
-  border: 2px solid var(--color-border);
+  border: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
 .profile-header-info {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding-top: 8px;
+  padding-top: 6px;
 }
 
 .profile-name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .profile-nickname {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
+  letter-spacing: -0.015em;
   color: var(--color-text);
   margin: 0;
   line-height: 1.2;
 }
 
 .profile-verified-icon {
-  color: var(--color-text-muted);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
 .profile-username {
-  font-size: 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-weight: 400;
   color: var(--color-text-muted);
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .profile-bio {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text);
-  line-height: 1.5;
-  max-width: 500px;
+  line-height: 1.55;
+  max-width: 520px;
   white-space: pre-wrap;
 }
 
 /* ── Profile Stats ── */
 .profile-stats {
   display: flex;
-  gap: 20px;
+  gap: 28px;
+  margin-top: 4px;
 }
 
 .profile-stat {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   cursor: default;
 }
 
 .profile-stat strong {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text);
   line-height: 1.2;
 }
 
 .profile-stat span {
-  font-size: 12px;
-  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   line-height: 1.2;
 }
 
 /* ── Post Card Stats Overlay ── */
 .post-card-stats {
   position: absolute;
-  bottom: 4px;
-  left: 4px;
-  right: 4px;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
   display: flex;
-  gap: 6px;
+  gap: 5px;
   font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
   pointer-events: none;
   flex-wrap: wrap;
 }
 
 .post-card-stat {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
-  background: rgba(0, 0, 0, 0.4);
-  padding: 1px 5px;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 6px;
   border-radius: 4px;
+}
+
+.post-card-stat svg {
+  width: 11px;
+  height: 11px;
 }
 
 /* ── Avatar Preview ── */
 .avatar-preview-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(0, 0, 0, 0.94);
   z-index: 2000;
   display: flex;
   align-items: center;
@@ -162,10 +175,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
   border: none;
   cursor: pointer;
   z-index: 2010;
+  transition: background-color var(--transition-fast);
 }
 
 .avatar-preview-close:hover {
@@ -175,7 +188,7 @@
 .avatar-preview-img {
   max-width: 90vw;
   max-height: 70vh;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   object-fit: contain;
 }
 
@@ -188,7 +201,7 @@
   justify-content: center;
   gap: 8px;
   padding: 12px 16px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
   z-index: 2010;
   overflow-x: auto;
 }
@@ -197,17 +210,17 @@
   width: 56px;
   height: 56px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 2px solid transparent;
   cursor: pointer;
   padding: 0;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   transition: border-color 0.2s;
 }
 
 .avatar-preview-strip-item.active {
-  border-color: var(--accent, #fe2c55);
+  border-color: var(--color-viewer-accent);
 }
 
 .avatar-preview-strip-item img {
@@ -217,11 +230,11 @@
   display: block;
 }
 
-/* ── Post Grid (TikTok Profile Grid) ── */
+/* ── Post Grid (contact sheet) ── */
 .post-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 4px;
+  gap: 5px;
 }
 
 .post-card {
@@ -230,12 +243,13 @@
   overflow: hidden;
   cursor: pointer;
   background: var(--color-bg-muted);
-  transition: transform var(--transition-fast);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .post-card:hover {
-  transform: scale(1.02);
+  transform: scale(1.015);
+  box-shadow: var(--shadow-md);
   z-index: 1;
 }
 
@@ -249,8 +263,8 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   background: rgba(0, 0, 0, 0.6);
   border-radius: var(--radius-sm);
   display: flex;
@@ -280,27 +294,15 @@
   object-fit: cover;
 }
 
-.post-card-type {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  font-size: 10px;
-  color: white;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-/* ── Media Viewer (TikTok Fullscreen) ── */
+/* ── Media Viewer (fullscreen) ──
+   Viewer chrome always sits on near-black, in both themes. */
 .media-viewer-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(0, 0, 0, 0.94);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -321,8 +323,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
   z-index: 20;
   border: none;
   cursor: pointer;
@@ -369,14 +370,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
   border: none;
   cursor: pointer;
 }
 
 .media-viewer-nav-btn:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+.media-viewer-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* ── Center: media content ── */
@@ -392,7 +397,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: slideUp 0.3s ease;
+  animation: fadeIn 0.2s ease;
 }
 
 .media-viewer-content img,
@@ -400,7 +405,7 @@
   max-width: 70vw;
   max-height: 85vh;
   object-fit: contain;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 }
 
 .media-viewer-placeholder {
@@ -420,7 +425,7 @@
   max-width: 70vw;
   max-height: 85vh;
   object-fit: contain;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 }
 
 /* ── Prev/Next — positioned relative to media-wrap ── */
@@ -437,8 +442,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
   z-index: 10;
   border: none;
   cursor: pointer;
@@ -458,13 +462,15 @@
 }
 
 .media-viewer-counter {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
-  background: rgba(0, 0, 0, 0.4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.45);
   padding: 4px 12px;
   border-radius: var(--radius-full);
   white-space: nowrap;
   margin-top: 8px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Preview strip (fixed at bottom) ── */
@@ -477,7 +483,7 @@
   justify-content: center;
   gap: 8px;
   padding: 12px 16px;
-  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
   z-index: 1010;
   overflow-x: auto;
   scrollbar-width: thin;
@@ -487,17 +493,17 @@
   width: 56px;
   height: 56px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 2px solid transparent;
   cursor: pointer;
   padding: 0;
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   transition: border-color 0.2s;
 }
 
 .media-viewer-strip-item.active {
-  border-color: var(--accent, #fe2c55);
+  border-color: var(--color-viewer-accent);
 }
 
 .media-viewer-strip-item img {
@@ -525,39 +531,55 @@
 .media-info-row {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .media-info-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
+}
+
+.media-info-label svg {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 3px;
 }
 
 .media-info-value {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(255, 255, 255, 0.88);
   line-height: 1.5;
   word-break: break-all;
 }
 
+.media-info-value.media-info-placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
 .media-info-path {
   font-family: var(--font-mono);
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .media-info-link {
-  color: var(--color-primary);
+  color: var(--color-viewer-accent);
   font-size: 12px;
   word-break: break-all;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .media-info-link:hover {
-  color: var(--color-primary-hover);
-  text-decoration: underline;
+  color: #fdba74;
+}
+
+.media-info-row-author .media-info-value {
+  font-weight: 600;
 }
 
 /* ── Responsive ── */
@@ -567,18 +589,17 @@
     align-items: center;
     text-align: center;
     gap: 16px;
-    padding: 20px 14px;
+    padding: 22px 16px;
   }
 
-  .profile-avatar {
+  .profile-avatar,
+  .profile-avatar-placeholder {
     width: 120px;
     height: 120px;
   }
 
   .profile-avatar-placeholder {
-    width: 120px;
-    height: 120px;
-    font-size: 44px;
+    font-size: 42px;
   }
 
   .profile-header-info {
@@ -591,25 +612,23 @@
   }
 
   .profile-nickname {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .profile-stats {
     justify-content: center;
+    gap: 22px;
   }
 
   .post-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 2px;
-  }
-
-  .media-viewer-wrap {
-    max-width: 100vw;
+    gap: 3px;
   }
 
   .media-viewer-wrap {
     flex-direction: column;
     gap: 16px;
+    max-width: 100vw;
   }
 
   .media-viewer-inner {
@@ -626,24 +645,18 @@
   }
 
   .media-viewer-nav-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 14px;
+    width: 36px;
+    height: 36px;
   }
 
   .media-viewer-nav-prev,
   .media-viewer-nav-next {
-    width: 32px;
-    height: 32px;
-    font-size: 14px;
+    width: 34px;
+    height: 34px;
   }
 
   .media-viewer-content img,
-  .media-viewer-content video {
-    max-width: 90vw;
-    max-height: 60vh;
-  }
-
+  .media-viewer-content video,
   .media-viewer-media-wrap img,
   .media-viewer-media-wrap video {
     max-width: 90vw;
@@ -663,6 +676,6 @@
 
   .user-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 12px;
+    gap: 10px;
   }
 }

@@ -82,6 +82,7 @@ function buildHeader() {
       el('button', {
         class: 'btn-icon theme-toggle',
         title: 'Toggle theme',
+        'aria-label': 'Toggle theme',
         onClick: (e) => {
           toggleTheme();
           const btn = e.currentTarget;
@@ -92,7 +93,13 @@ function buildHeader() {
       }, [
         themeIcon(isDark()),
       ]),
-      el('div', { class: 'app-header-user', onClick: toggleDropdown }, [
+      el('button', {
+        class: 'app-header-user',
+        type: 'button',
+        'aria-label': 'Account menu',
+        'aria-haspopup': 'true',
+        onClick: toggleDropdown,
+      }, [
         avatarEl,
         el('span', { class: 'app-header-username' }, [user?.name || 'Guest']),
       ]),

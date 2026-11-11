@@ -1,9 +1,8 @@
 import { el, icon, clear, mount } from '../utils/dom.js';
 import { listUsers, fetchUserAvatarUrl } from '../api.js';
 import { store } from '../store.js';
-import { navigate } from '../router.js';
 import { isDark, toggleTheme } from '../utils/theme.js';
-import { themeIcon } from '../utils/icons.js';
+import { themeIcon, ICONS } from '../utils/icons.js';
 import { loadResizedImage } from '../utils/cache.js';
 
 const BATCH = 30;
@@ -41,6 +40,7 @@ export function getSidebarToggleButton() {
   return el('button', {
     class: 'btn-icon sidebar-toggle-btn',
     title: 'Toggle user list',
+    'aria-label': 'Toggle user list',
     onClick: toggleSidebar,
   }, [icon(HAMBURGER_ICON, 20)]);
 }
@@ -80,14 +80,14 @@ function renderInlineResults(q) {
 
   for (const user of filtered.slice(0, 50)) {
     const displayName = user.username;
-    const item = el('div', {
+    const item = el('a', {
       class: 'sidebar-search-item',
+      href: `#/profile/${user.uid}`,
       'data-uid': user.uid,
       'data-username': displayName,
       onClick: () => {
         closeInlineResults();
         closeSidebar();
-        navigate(`/profile/${user.uid}`);
       },
     }, [
       el('div', { class: 'sidebar-search-item-avatar' }, [
@@ -129,11 +129,11 @@ function positionSearchResults() {
 
 function createUserItem(displayName, uid) {
   const isActive = store.state.currentUser === uid;
-  return el('div', {
+  return el('a', {
     class: 'sidebar-user-item' + (isActive ? ' active' : ''),
+    href: `#/profile/${uid}`,
     'data-uid': uid,
     'data-username': displayName,
-    onClick: () => navigate(`/profile/${uid}`),
   }, [
     el('div', { class: 'sidebar-user-avatar' }, [
       el('span', {}, [displayName[0]?.toUpperCase() || '?']),
@@ -200,14 +200,18 @@ export async function initSidebar(container) {
     el('span', { class: 'sidebar-title' }, 'Users'),
     el('button', {
       class: 'btn-icon sidebar-close-btn',
+      title: 'Close user list',
+      'aria-label': 'Close user list',
       onClick: closeSidebar,
-    }, ['✕']),
+    }, [icon(ICONS.close, 14)]),
   ]);
 
   searchInputEl = el('input', {
     class: 'sidebar-search-input',
     type: 'text',
+    name: 'sidebar-user-search',
     placeholder: 'Search users...',
+    'aria-label': 'Search users',
     autocomplete: 'off',
     spellcheck: 'false',
     onInput: function () {
@@ -241,14 +245,12 @@ export async function initSidebar(container) {
     }
   });
 
-  const newestBtn = el('button', {
+  const newestBtn = el('a', {
     class: 'sidebar-theme-btn',
-    onClick: () => {
-      closeSidebar();
-      navigate('/newest');
-    },
+    href: '#/newest',
+    onClick: () => closeSidebar(),
   }, [
-    icon('M13 2L3 14h9l-1 8 10-12h-9l1-8z', 16),
+    icon(ICONS.clock, 16),
     el('span', {}, 'Newest'),
   ]);
 
@@ -267,6 +269,7 @@ export async function initSidebar(container) {
   const themeBtn = el('button', {
     class: 'sidebar-theme-btn',
     title: 'Toggle theme',
+    'aria-label': 'Toggle theme',
     onClick: () => {
       toggleTheme();
       const newIcon = themeIcon(isDark(), 16);

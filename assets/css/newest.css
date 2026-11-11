@@ -1,3 +1,4 @@
+/* ── Newest Feed (fullscreen, always black in both themes) ── */
 .newest2-page {
   height: 100%;
   display: flex;
@@ -20,10 +21,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color var(--transition-fast);
 }
 
 .newest2-close:hover {
@@ -39,17 +39,16 @@
   min-height: 0;
 }
 
+/* Thumbnail rail: a solid panel on black; blur would have nothing to separate */
 .newest2-thumb-container {
   width: 180px;
   max-height: 80vh;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 8px;
   flex-shrink: 0;
 }
@@ -72,21 +71,16 @@
 .newest2-thumb-item {
   position: relative;
   aspect-ratio: 200 / 265;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   cursor: pointer;
   border: 2px solid transparent;
   background: rgba(0, 0, 0, 0.3);
-  transition: border-color 0.2s, transform 0.15s;
-}
-
-.newest2-thumb-item:hover {
-  transform: scale(1.05);
-  z-index: 2;
+  transition: border-color 0.2s;
 }
 
 .newest2-thumb-item.active {
-  border-color: #fe2c55;
+  border-color: var(--color-viewer-accent);
 }
 
 .newest2-thumb-item img,
@@ -168,31 +162,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
   line-height: 1;
+  transition: background-color var(--transition-fast);
 }
 
 .newest2-nav-btn:hover {
   background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.1);
 }
 
 .newest2-nav-btn:active {
-  transform: scale(0.9);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .newest2-nav-btn:disabled {
   opacity: 0.3;
-  cursor: default;
-  transform: none;
-}
-
-.newest2-nav-btn:disabled:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: none;
+  cursor: not-allowed;
 }
 
 .newest2-info-panel {
@@ -207,13 +193,14 @@
 }
 
 .newest2-info-panel .media-info-label {
-  font-size: 15px;
+  font-size: 11px;
 }
 
 .newest2-info-panel .media-info-value {
-  font-size: 15px;
+  font-size: 14px;
 }
 
+/* Mute button floats over moving video: glass separates it from the feed */
 .newest2-mute-btn {
   position: absolute;
   top: 12px;
@@ -224,24 +211,18 @@
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: background-color var(--transition-fast);
 }
 
 .newest2-mute-btn:hover {
   background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: scale(1.05);
-}
-
-.newest2-mute-btn:active {
-  transform: scale(0.95);
 }
 
 /* --- Video controls overlay --- */
@@ -283,7 +264,6 @@
   left: 50%;
   transform: translate(-50%, -50%);
   color: #fff;
-  font-size: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -292,6 +272,7 @@
   pointer-events: none;
   transition: opacity 0.15s ease;
   z-index: 5;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.6));
 }
 
 .newest2-play-flash-visible {
@@ -305,7 +286,6 @@
   background: rgba(255, 255, 255, 0.15);
   border: none;
   color: #fff;
-  font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -313,7 +293,7 @@
   flex-shrink: 0;
   line-height: 1;
   padding: 0;
-  transition: background 0.15s;
+  transition: background var(--transition-fast);
 }
 
 .newest2-play-btn-bottom:hover {
@@ -350,23 +330,27 @@
 }
 
 .newest2-video-overlay-meta {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
   margin-bottom: 4px;
-  opacity: 0.9;
+}
+
+.newest2-video-overlay-user {
+  font-weight: 600;
 }
 
 .newest2-video-overlay-date {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.65);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
 }
 
 .newest2-video-overlay-caption {
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 13.5px;
+  line-height: 1.45;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-  opacity: 0.8;
+  color: rgba(255, 255, 255, 0.85);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -394,7 +378,6 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
-  outline: none;
 }
 
 .newest2-seek-bar::-webkit-slider-thumb {
@@ -402,21 +385,16 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--color-viewer-accent);
   border: 2px solid #fff;
   cursor: pointer;
-  transition: transform 0.15s;
-}
-
-.newest2-seek-bar::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
 }
 
 .newest2-seek-bar::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: var(--color-viewer-accent);
   border: 2px solid #fff;
   cursor: pointer;
 }
@@ -429,7 +407,8 @@
 
 .newest2-time-display {
   color: #fff;
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   min-width: 80px;
@@ -464,6 +443,5 @@
     right: 8px;
     width: 36px;
     height: 36px;
-    font-size: 16px;
   }
 }
