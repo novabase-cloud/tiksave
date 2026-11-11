@@ -4,6 +4,12 @@
   "main": "src/index.js",
   "workers_dev": true,
   "compatibility_date": "2026-06-14",
+  "kv_namespaces": [
+    {
+      "binding": "TELLER_KV",
+      "id": "def4e2c8e97f41c5a296697bbd9f6c2e"
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 0.1

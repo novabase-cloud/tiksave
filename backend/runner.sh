@@ -66,6 +66,7 @@ echo "=========================================================="
 send_heartbeat() {
   echo "[Heartbeat] Registering tunnel URL with Teller: $TELLER_URL"
   RESP=$(curl -s -X POST "$TELLER_URL/teller/register" \
+    -A "TikSave-Runner/1.0 (Linux; Cloudflare-Tunnel)" \
     -H "Content-Type: application/json" \
     -H "x-teller-secret: $TELLER_SECRET" \
     -d "{\"url\":\"$TUNNEL_URL\",\"secret\":\"$TELLER_SECRET\"}" || true)
