@@ -10,8 +10,12 @@ PORT="${PORT:-3000}"
 HEARTBEAT_INTERVAL=600 # 10 minutes
 MAX_LIFETIME_MINUTES=330 # 5.5 hours (trigger next runner before 6h limit)
 
-# 1. Install dependencies
-echo "[1/4] Installing backend dependencies..."
+# 1. Install dependencies & ensure ffmpeg
+echo "[1/4] Ensuring ffmpeg & installing backend dependencies..."
+if ! command -v ffmpeg &> /dev/null; then
+  echo "Installing ffmpeg..."
+  sudo apt-get update && sudo apt-get install -y ffmpeg
+fi
 cd "$(dirname "$0")"
 npm install --production
 
