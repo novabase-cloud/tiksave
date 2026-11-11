@@ -1,160 +1,197 @@
-import express from 'express';
-import cors from 'cors';
-import sharp from 'sharp';
+import express from "express";
+import cors from "cors";
+import sharp from "sharp";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for all origins and headers
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['*'],
-  exposedHeaders: ['Content-Type', 'Content-Length', 'Cache-Control'],
-}));
+// Enable CORS for all routes
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: [
+      "Authorization",
+      "Content-Type",
+      "x-requested-with",
+      "x-repo",
+      "x-repo-type",
+    ],
+    maxAge: 86400,
+  })
+);
 
-function clamp(v, min, max, defaultVal) {
-  const num = parseInt(v, 10);
-  if (isNaN(num)) return defaultVal;
-  return Math.min(Math.max(num, min), max);
+// In-memory LRU cache for resized images (max 500 items, ~100MB)
+const imageCache = new Map();
+const MAX_CACHE_ENTRIES = 500;
+
+function getCache(key) {
+  if (!imageCache.has(key)) return null;
+  const value = imageCache.get(key);
+  imageCache.delete(key);
+  imageCache.set(key, value);
+  return value;
 }
 
-async function resizeImage(buf, w, q, fmt) {
-  let targetFmt = fmt;
-  if (!['jpeg', 'webp', 'png', 'avif'].includes(targetFmt)) {
-    targetFmt = 'jpeg';
+function setCache(key, value) {
+  if (imageCache.has(key)) imageCache.delete(key);
+  while (imageCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = imageCache.keys().next().value;
+    imageCache.delete(oldestKey);
   }
-  const mime = targetFmt === 'webp' ? 'image/webp' :
-               targetFmt === 'png' ? 'image/png' :
-               targetFmt === 'avif' ? 'image/avif' : 'image/jpeg';
-
-  const data = await sharp(buf)
-    .rotate() // auto-orient based on EXIF
-    .resize({ width: w, withoutEnlargement: true })
-    .toFormat(targetFmt, { quality: q })
-    .toBuffer();
-
-  return { data, mime };
+  imageCache.set(key, value);
 }
 
-// Health check
-app.get(['/', '/health'], (req, res) => {
+// ─── Health Endpoint ────────────────────────────────────────────────────────
+app.get("/health", (req, res) => {
   res.json({
-    status: 'ok',
-    service: 'tiksave-backend',
+    status: "ok",
+    service: "tiksave-backend",
     uptime: Math.round(process.uptime()),
-    timestamp: Date.now(),
-    node: process.version,
+    cacheSize: imageCache.size,
+    memory: process.memoryUsage(),
+    timestamp: new Date().toISOString(),
   });
 });
 
-// GET /api/resize?url=...&w=300&q=80&fmt=jpeg&token=...
-app.get('/api/resize', async (req, res) => {
+app.get("/", (req, res) => {
+  res.json({
+    name: "tiksave-backend-runner",
+    status: "running",
+    endpoints: ["/health", "/api/resize", "/api/proxy"],
+  });
+});
+
+// ─── Image Resizer Endpoint ──────────────────────────────────────────────────
+// Usage: GET /api/resize?url=<image_url>&w=300&q=80&token=<hf_token>
+app.get("/api/resize", async (req, res) => {
+  const { url, w, q, format = "webp" } = req.query;
+
+  if (!url) {
+    return res.status(400).json({ error: "Missing 'url' query parameter" });
+  }
+
+  // Token can come from query param or Authorization header
+  const token =
+    req.query.token ||
+    (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+
+  const targetWidth = Math.min(Math.max(parseInt(w, 10) || 300, 16), 1920);
+  const targetQuality = Math.min(Math.max(parseInt(q, 10) || 80, 10), 100);
+  const targetFormat = ["webp", "jpeg", "jpg", "png"].includes(format.toLowerCase())
+    ? format.toLowerCase() === "jpg" ? "jpeg" : format.toLowerCase()
+    : "webp";
+
+  const cacheKey = `${url}::w${targetWidth}::q${targetQuality}::${targetFormat}`;
+  const cached = getCache(cacheKey);
+
+  if (cached) {
+    res.set({
+      "Content-Type": cached.contentType,
+      "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+      "x-cache": "HIT",
+    });
+    return res.send(cached.buffer);
+  }
+
   try {
-    const targetUrl = req.query.url;
-    if (!targetUrl) {
-      return res.status(400).json({ error: 'Missing required query param: url' });
-    }
-
-    const w = clamp(req.query.w, 16, 4096, 300);
-    const q = clamp(req.query.q, 1, 100, 80);
-    const fmt = (req.query.fmt || 'jpeg').toLowerCase();
-
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) TikSave/1.0',
+    const fetchHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     };
-    if (req.query.token) {
-      headers['Authorization'] = 'Bearer ' + req.query.token;
+    if (token) {
+      fetchHeaders["Authorization"] = `Bearer ${token}`;
     }
 
-    // Hugging Face resolve returns 302 to CDN URL.
-    // Manual redirect follow preserves credentials or switches to signed location
-    let resp = await fetch(targetUrl, { redirect: 'manual', headers });
-    if (resp.status >= 300 && resp.status < 400) {
-      const location = resp.headers.get('location');
-      if (!location) {
-        return res.status(502).json({ error: 'Redirect without Location header' });
-      }
-      resp = await fetch(location, { redirect: 'follow' });
-    }
+    const upstream = await fetch(url, { headers: fetchHeaders });
 
-    if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      return res.status(resp.status).json({
-        error: `Source fetch failed: HTTP ${resp.status}`,
-        details: errText.slice(0, 200),
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({
+        error: "Upstream fetch failed",
+        status: upstream.status,
+        url,
       });
     }
 
-    const buffer = Buffer.from(await resp.arrayBuffer());
-    const { data, mime } = await resizeImage(buffer, w, q, fmt);
+    const inputBuffer = Buffer.from(await upstream.arrayBuffer());
 
-    res.setHeader('Content-Type', mime);
-    res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, immutable');
-    return res.status(200).send(data);
-  } catch (err) {
-    console.error('[resize-error]', err);
-    return res.status(500).json({ error: err.message || 'Internal image resizing error' });
-  }
-});
+    let pipeline = sharp(inputBuffer).resize({
+      width: targetWidth,
+      withoutEnlargement: true,
+      fit: "inside",
+    });
 
-// POST /api/resize (Binary body)
-app.post('/api/resize', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
-  try {
-    const buf = req.body;
-    if (!buf || !buf.length) {
-      return res.status(400).json({ error: 'Empty request body' });
+    let contentType = "image/webp";
+    if (targetFormat === "webp") {
+      pipeline = pipeline.webp({ quality: targetQuality, effort: 4 });
+      contentType = "image/webp";
+    } else if (targetFormat === "jpeg") {
+      pipeline = pipeline.jpeg({ quality: targetQuality, mozjpeg: true });
+      contentType = "image/jpeg";
+    } else if (targetFormat === "png") {
+      pipeline = pipeline.png({ compressionLevel: 6 });
+      contentType = "image/png";
     }
 
-    const w = clamp(req.query.w, 16, 4096, 300);
-    const q = clamp(req.query.q, 1, 100, 80);
-    const fmt = (req.query.fmt || 'jpeg').toLowerCase();
+    const outputBuffer = await pipeline.toBuffer();
 
-    const { data, mime } = await resizeImage(buf, w, q, fmt);
+    // Cache the processed image
+    setCache(cacheKey, { buffer: outputBuffer, contentType });
 
-    res.setHeader('Content-Type', mime);
-    res.setHeader('Cache-Control', 'public, max-age=604800, s-maxage=604800, immutable');
-    return res.status(200).send(data);
+    res.set({
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+      "x-cache": "MISS",
+    });
+    return res.send(outputBuffer);
   } catch (err) {
-    console.error('[resize-post-error]', err);
-    return res.status(500).json({ error: err.message });
+    console.error(`Resize error for ${url}:`, err.message);
+    return res.status(500).json({
+      error: "Image processing failed",
+      message: err.message,
+    });
   }
 });
 
-// Proxy endpoint for general media forwarding with CORS
-app.get('/proxy/*', async (req, res) => {
+// ─── Proxy Endpoint ──────────────────────────────────────────────────────────
+// Usage: GET /api/proxy?url=<target_url>&token=<token>
+app.get("/api/proxy", async (req, res) => {
+  const { url } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: "Missing 'url' query parameter" });
+  }
+
+  const token =
+    req.query.token ||
+    (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+
   try {
-    const subpath = req.params[0];
-    const targetUrl = 'https://huggingface.co/' + subpath + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (compatible; TikSaveProxy/1.0)',
+    const fetchHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
     };
-    const token = req.query.token;
     if (token) {
-      headers['Authorization'] = 'Bearer ' + token;
+      fetchHeaders["Authorization"] = `Bearer ${token}`;
     }
 
-    let resp = await fetch(targetUrl, { redirect: 'manual', headers });
-    if (resp.status >= 300 && resp.status < 400) {
-      const loc = resp.headers.get('location');
-      if (loc) resp = await fetch(loc, { redirect: 'follow' });
+    const upstream = await fetch(url, { headers: fetchHeaders });
+    res.status(upstream.status);
+
+    const passHeaders = ["content-type", "content-length", "etag", "last-modified"];
+    for (const h of passHeaders) {
+      const v = upstream.headers.get(h);
+      if (v) res.set(h, v);
     }
+    res.set("Cache-Control", "public, max-age=86400");
 
-    if (!resp.ok) {
-      return res.status(resp.status).send(`Upstream returned ${resp.status}`);
-    }
-
-    const contentType = resp.headers.get('content-type') || 'application/octet-stream';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-
-    const buffer = Buffer.from(await resp.arrayBuffer());
-    return res.status(200).send(buffer);
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    return res.send(buffer);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error(`Proxy error for ${url}:`, err.message);
+    return res.status(500).json({ error: "Proxy failed", message: err.message });
   }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[tiksave-backend] Server listening on http://0.0.0.0:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`[tiksave-backend] Server listening on port ${PORT}`);
 });

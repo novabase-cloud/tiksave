@@ -16,7 +16,7 @@ export default {
 
     // /teller → teller discovery and registration for GitHub Action runner backend
     if (path === "/teller" || path.startsWith("/teller/")) {
-      return handleTeller(request, env, ctx);
+      return handleTeller(request, url, env, ctx);
     }
 
     // /proxy/* → forward to Hugging Face

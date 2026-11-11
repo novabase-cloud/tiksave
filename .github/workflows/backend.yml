@@ -1,0 +1,33 @@
+name: Backend Runner
+
+on:
+  schedule:
+    - cron: '0 */5 * * *' # Backup trigger every 5 hours
+  workflow_dispatch:
+
+concurrency:
+  group: backend-runner
+  cancel-in-progress: false
+
+jobs:
+  run-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 hours maximum GitHub Actions limit
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Backend & Cloudflare Quick Tunnel
+        env:
+          TELLER_URL: "https://api-tiksave.mailtestvartext.workers.dev"
+          TELLER_SECRET: ${{ secrets.TELLER_SECRET || 'tiksave-teller-secret-2026' }}
+          GH_TOKEN: ${{ secrets.PULL_TIKSAVE_WEB_DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x backend/runner.sh
+          bash backend/runner.sh

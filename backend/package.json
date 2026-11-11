@@ -1,16 +1,15 @@
 {
   "name": "tiksave-backend",
   "version": "1.0.0",
-  "description": "High-performance image resizer and proxy backend running on GitHub Actions runner with Cloudflare Tunnel",
+  "description": "High-performance image resizer and proxy backend running on GitHub Actions",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "tunnel": "node tunnel-runner.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.19.2",
+    "express": "^4.21.2",
     "sharp": "^0.33.5"
   }
 }

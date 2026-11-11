@@ -1,170 +1,170 @@
 import { corsHeaders } from "../utils/cors.js";
 
-// Global isolate in-memory cache
-let inMemoryBackend = null;
-
-const CACHE_KEY_URL = "https://api-tiksave.internal/teller/backend";
+// In-memory fallback if KV namespace is not yet bound
+let _memoryBackend = null;
+const CACHE_KEY = "https://api-tiksave.internal/teller-active-backend";
 const DEFAULT_SECRET = "tiksave-teller-secret-2026";
-const MAX_BACKEND_AGE_MS = 25 * 60 * 1000; // 25 minutes validity window
+const MAX_STALE_MS = 20 * 60 * 1000; // 20 minutes max stale threshold
 
-export async function handleTeller(request, env, ctx) {
-  const method = request.method;
-
-  if (method === "OPTIONS") {
+export async function handleTeller(request, url, env, ctx) {
+  if (request.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders() });
   }
 
-  // --- GET /teller : return active backend URL ---
-  if (method === "GET") {
-    let backend = inMemoryBackend;
+  const defaultHeaders = {
+    ...corsHeaders(),
+    "Content-Type": "application/json",
+  };
 
-    // Check Cloudflare Cache API if memory is empty
-    if (!backend) {
-      try {
-        const cache = caches.default;
-        const cacheResp = await cache.match(CACHE_KEY_URL);
-        if (cacheResp) {
-          backend = await cacheResp.json();
-          inMemoryBackend = backend;
-        }
-      } catch (err) {
-        console.warn("[teller-cache-err]", err);
-      }
+  const path = url.pathname;
+
+  // 1. REGISTER / HEARTBEAT: POST /teller, POST /teller/register, POST /teller/heartbeat
+  if (request.method === "POST") {
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid JSON body" }),
+        { status: 400, headers: defaultHeaders }
+      );
     }
 
-    // Check KV if bound and still no backend
-    if (!backend && env?.TELLER_KV) {
-      try {
-        const kvVal = await env.TELLER_KV.get("active_backend");
-        if (kvVal) {
-          backend = JSON.parse(kvVal);
-          inMemoryBackend = backend;
-        }
-      } catch (err) {
-        console.warn("[teller-kv-err]", err);
-      }
+    const secret =
+      body.secret ||
+      request.headers.get("x-teller-secret") ||
+      (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+
+    const expectedSecret = env.TELLER_SECRET || DEFAULT_SECRET;
+
+    if (!secret || secret !== expectedSecret) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Unauthorized: invalid teller secret" }),
+        { status: 401, headers: defaultHeaders }
+      );
+    }
+
+    const backendUrl = (body.url || "").trim().replace(/\/+$/, "");
+    if (!backendUrl || !backendUrl.startsWith("http")) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid backend URL" }),
+        { status: 400, headers: defaultHeaders }
+      );
     }
 
     const now = Date.now();
-    const isAlive = backend && backend.url && (now - (backend.updatedAt || 0) < MAX_BACKEND_AGE_MS);
-
-    if (isAlive) {
-      const ageSeconds = Math.round((now - backend.updatedAt) / 1000);
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          active: true,
-          url: backend.url,
-          updatedAt: backend.updatedAt,
-          ageSeconds: ageSeconds,
-          runner: backend.runner || "unknown",
-        }),
-        {
-          status: 200,
-          headers: {
-            ...corsHeaders(),
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-          },
-        }
-      );
-    }
-
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        active: false,
-        url: null,
-        message: "No active runner backend available. Please start or wait for the GitHub Action runner.",
-      }),
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders(),
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-        },
-      }
-    );
-  }
-
-  // --- POST /teller : register active backend URL ---
-  if (method === "POST") {
-    const authHeader = request.headers.get("Authorization") || "";
-    const expectedSecret = env?.TELLER_SECRET || DEFAULT_SECRET;
-
-    if (authHeader !== `Bearer ${expectedSecret}`) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized: Invalid teller secret token" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders(), "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    let payload = {};
-    try {
-      payload = await request.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON payload" }),
-        { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-      );
-    }
-
-    const rawUrl = (payload.url || "").trim();
-    if (!rawUrl || !rawUrl.startsWith("http")) {
-      return new Response(
-        JSON.stringify({ error: "Missing or invalid 'url' field" }),
-        { status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" } }
-      );
-    }
-
-    const cleanUrl = rawUrl.replace(/\/+$/, "");
-    inMemoryBackend = {
-      url: cleanUrl,
-      updatedAt: Date.now(),
-      runner: payload.runner || "unknown",
+    const payload = {
+      url: backendUrl,
+      updatedAt: now,
+      expiresAt: now + 15 * 60 * 1000,
     };
 
-    // Store into Cloudflare Cache API for edge-wide availability
-    const cacheKey = new Request(CACHE_KEY_URL);
-    const cacheResp = new Response(JSON.stringify(inMemoryBackend), {
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "max-age=1500", // 25 minutes
-      },
-    });
-    ctx.waitUntil(caches.default.put(cacheKey, cacheResp));
+    // Update in-memory
+    _memoryBackend = payload;
 
-    // Store into KV if bound
-    if (env?.TELLER_KV) {
-      ctx.waitUntil(
-        env.TELLER_KV.put("active_backend", JSON.stringify(inMemoryBackend), {
-          expirationTtl: 1500,
-        })
-      );
+    // Persist in Cloudflare KV if bound
+    if (env.TELLER_KV) {
+      try {
+        await env.TELLER_KV.put("active_backend", JSON.stringify(payload), {
+          expirationTtl: 1200, // 20 minutes
+        });
+      } catch (err) {
+        console.error("Failed to write to TELLER_KV:", err);
+      }
+    }
+
+    // Persist in Edge Cache
+    if (caches.default && ctx) {
+      try {
+        const cacheResp = new Response(JSON.stringify(payload), {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=900",
+          },
+        });
+        ctx.waitUntil(caches.default.put(CACHE_KEY, cacheResp));
+      } catch (err) {
+        console.error("Failed to write to caches.default:", err);
+      }
     }
 
     return new Response(
       JSON.stringify({
         ok: true,
-        registered: cleanUrl,
-        updatedAt: inMemoryBackend.updatedAt,
+        message: "Runner registered successfully",
+        ...payload,
+      }),
+      { status: 200, headers: defaultHeaders }
+    );
+  }
+
+  // 2. DISCOVERY: GET /teller, GET /teller/url
+  if (request.method === "GET") {
+    let data = null;
+
+    // Check Cloudflare KV first
+    if (env.TELLER_KV) {
+      try {
+        const raw = await env.TELLER_KV.get("active_backend");
+        if (raw) data = JSON.parse(raw);
+      } catch (e) {
+        console.error("Failed to read from TELLER_KV:", e);
+      }
+    }
+
+    // Check Edge Cache
+    if (!data && caches.default) {
+      try {
+        const hit = await caches.default.match(CACHE_KEY);
+        if (hit) data = await hit.json();
+      } catch {}
+    }
+
+    // Check in-memory fallback
+    if (!data && _memoryBackend) {
+      data = _memoryBackend;
+    }
+
+    // Validate freshness
+    if (data && data.url) {
+      const age = Date.now() - (data.updatedAt || 0);
+      if (age < MAX_STALE_MS) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            url: data.url,
+            updatedAt: data.updatedAt,
+            ageMs: age,
+          }),
+          {
+            status: 200,
+            headers: {
+              ...defaultHeaders,
+              "Cache-Control": "public, max-age=30", // client caches for 30s
+            },
+          }
+        );
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: "no_active_backend",
+        message: "No active GitHub Actions runner tunnel registered or runner expired",
       }),
       {
-        status: 200,
-        headers: { ...corsHeaders(), "Content-Type": "application/json" },
+        status: 503,
+        headers: {
+          ...defaultHeaders,
+          "Cache-Control": "no-store",
+        },
       }
     );
   }
 
   return new Response(
-    JSON.stringify({ error: "Method not allowed. Use GET or POST." }),
-    {
-      status: 405,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
-    }
+    JSON.stringify({ ok: false, error: "Method Not Allowed" }),
+    { status: 405, headers: defaultHeaders }
   );
 }
