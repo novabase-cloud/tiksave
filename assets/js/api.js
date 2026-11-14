@@ -39,6 +39,35 @@ export async function listUsers() {
   }));
 }
 
+function extractItemsFromMediaIndex(prefix, mediaindex) {
+  if (!mediaindex) return [];
+  const map = new Map();
+  const allMedia = [
+    ...Object.values(mediaindex.videos || {}),
+    ...Object.values(mediaindex.images || {})
+  ];
+  for (const m of allMedia) {
+    const itemId = m.itemId || m.item_id;
+    if (!itemId) continue;
+    if (!map.has(itemId)) {
+      map.set(itemId, {
+        itemId,
+        path: `${prefix}/${itemId}`,
+        files: [],
+      });
+    }
+    const name = m.fileName || m.filename || `${itemId}-${m.index || 0}.mp4`;
+    const ext = name.split('.').pop().toLowerCase();
+    map.get(itemId).files.push({
+      name,
+      path: `${prefix}/${itemId}/${name}`,
+      size: m.size || 0,
+      ext,
+    });
+  }
+  return Array.from(map.values());
+}
+
 export async function listUserItems(rawUid) {
   const prefix = `Posts/${rawUid}`;
 
@@ -48,13 +77,67 @@ export async function listUserItems(rawUid) {
     fetchJSON(resolveUrl(`${prefix}/post_list.json`)),
   ]);
 
+  let items = [];
+  if (postResult.ok && Array.isArray(postResult.data)) {
+    items = postResult.data;
+  } else if (metaResult.ok && metaResult.data) {
+    items = extractItemsFromMediaIndex(prefix, metaResult.data);
+  }
+
+  // Fallback tambahan jika items kosong namun metadata.json ada
+  if (!items.length) {
+    const dirMeta = await fetchJSON(resolveUrl(`${prefix}/metadata.json`));
+    if (dirMeta.ok && Array.isArray(dirMeta.data?.children)) {
+      for (const c of dirMeta.data.children) {
+        if (c.type === 'directory') {
+          const name = c.path.split('/').pop();
+          if (name && name !== 'avatar' && name !== 'Following') {
+            items.push({
+              itemId: name,
+              path: c.path,
+              files: [],
+            });
+          }
+        }
+      }
+    }
+  }
+
   const userList = await getUserList();
-  const avatarPath = userList.find(u => u.uid === rawUid)?.avatar_path || null;
+  const matchedUser = userList.find(u => u.uid === rawUid || u.unique_id === rawUid);
+  let avatarPath = matchedUser?.avatar_path || null;
+  let avatarPaths = matchedUser?.avatar_paths || (avatarPath ? [avatarPath] : []);
+
+  // Coba cek avatar/metadata.json jika avatarPaths belum terisi
+  if (!avatarPaths.length) {
+    const avMeta = await fetchJSON(resolveUrl(`${prefix}/avatar/metadata.json`));
+    if (avMeta.ok && Array.isArray(avMeta.data?.children)) {
+      const imgExts = ['.jpg', '.jpeg', '.png', '.webp'];
+      const found = avMeta.data.children
+        .filter(c => c.type === 'file' && imgExts.some(ext => c.path.toLowerCase().endsWith(ext)))
+        .map(c => c.path);
+      if (found.length) {
+        found.sort((a, b) => {
+          const vA = parseInt((a.match(/-(\d+)\.[^.]+$/) || [0, 0])[1], 10);
+          const vB = parseInt((b.match(/-(\d+)\.[^.]+$/) || [0, 0])[1], 10);
+          return vA - vB;
+        });
+        avatarPaths = found;
+        avatarPath = found[found.length - 1];
+      }
+    }
+  }
+
+  const remoteAvatarUrl = infoResult.ok
+    ? (infoResult.data?.avatarLarger || infoResult.data?.avatarMedium || infoResult.data?.avatarThumb || null)
+    : null;
 
   return {
-    items: (postResult.ok ? postResult.data : []).sort((a, b) => b.itemId.localeCompare(a.itemId)),
+    items: items.sort((a, b) => b.itemId.localeCompare(a.itemId)),
     metadata: metaResult.ok ? metaResult.data : null,
     avatarPath,
+    avatarPaths,
+    remoteAvatarUrl,
     userInfo: infoResult.ok ? infoResult.data : null,
   };
 }
@@ -65,7 +148,7 @@ export function getMediaUrl(entryPath) {
 
 export async function fetchUserAvatarUrl(username) {
   const data = await getUserList();
-  const user = data.find(u => u.unique_id === username);
+  const user = data.find(u => u.unique_id === username || u.uid === username);
   return user?.avatar_path ? getMediaUrl(user.avatar_path) : null;
 }
 

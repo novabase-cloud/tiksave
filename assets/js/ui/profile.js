@@ -5,7 +5,8 @@ import { openMediaViewer } from './mediaViewer.js';
 import { generateVideoThumbnail } from '../utils/thumbUtils.js';
 import { loadResizedImage, loadCachedImage } from '../utils/cache.js';
 import { formatNumber } from '../utils/format.js';
-import { ICONS } from '../utils/icons.js';
+
+const PLAY_ICON = '<polygon points="5 3 19 12 5 21 5 3"/>';
 
 const MAX_CONCURRENT = 4;
 let _pending = 0;
@@ -38,12 +39,12 @@ export async function renderProfile(container, uid) {
 
   try {
     const data = await listUserItems(uid);
-    const { items, metadata, avatarPath, userInfo } = data;
+    const { items, metadata, avatarPath, avatarPaths, remoteAvatarUrl, userInfo } = data;
 
     store.set({ currentItems: items, loading: false });
 
     // Profile header
-    const avatarUrl = avatarPath ? getMediaUrl(avatarPath) : null;
+    const avatarUrl = avatarPath ? getMediaUrl(avatarPath) : (remoteAvatarUrl || null);
     const displayName = userInfo?.uniqueId || userInfo?.unique_id || uid;
     const nickname = userInfo?.nickname || '';
     const following = userInfo?.followingCount;
@@ -59,7 +60,8 @@ export async function renderProfile(container, uid) {
         ? el('img', { class: 'profile-avatar', src: avatarUrl, alt: displayName, loading: 'lazy' })
         : el('div', { class: 'profile-avatar-placeholder' }, [(displayName[0] || '?').toUpperCase()]);
 
-    avatarImg.addEventListener('click', () => openAvatarPreview(avatarPath, displayName));
+    const allAvatarPaths = (avatarPaths && avatarPaths.length) ? avatarPaths : (avatarPath ? [avatarPath] : (remoteAvatarUrl ? [remoteAvatarUrl] : []));
+    avatarImg.addEventListener('click', () => openAvatarPreview(allAvatarPaths, displayName));
 
     const verifiedIcon = isVerified
       ? el('svg', { width: 20, height: 20, viewBox: '0 0 48 48', fill: 'currentColor', class: 'profile-verified-icon' }, [
@@ -98,7 +100,7 @@ export async function renderProfile(container, uid) {
 
     if (!items.length) {
       container.appendChild(el('div', { class: 'empty-state' }, [
-        el('div', { class: 'empty-state-icon' }, [icon(ICONS.camera, 36)]),
+        el('div', { class: 'empty-state-icon' }, ['📸']),
         el('h3', {}, 'No Posts Yet'),
         el('p', {}, 'This user has no archived content.'),
       ]));
@@ -146,30 +148,21 @@ export async function renderProfile(container, uid) {
 
       const card = el('div', {
         class: 'post-card',
-        role: 'button',
-        tabindex: '0',
-        'aria-label': `Open post by ${nickname || displayName}`,
         onClick: () => openMediaViewer(posts, postIdx, 0, {
           username: displayName,
           nickname,
           followers,
           userInfo,
         }),
-        onKeydown: (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            card.click();
-          }
-        },
       }, [
         imgEl,
-        isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(ICONS.play, 13)]) : null,
+        isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(PLAY_ICON, 14)]) : null,
         el('div', { class: 'post-card-stats' }, [
           diggCount != null ? el('span', { class: 'post-card-stat' }, [
-            icon(ICONS.heart, 11), formatNumber(diggCount),
+            '❤️ ', formatNumber(diggCount),
           ]) : null,
           playCount != null ? el('span', { class: 'post-card-stat' }, [
-            icon(ICONS.play, 11), formatNumber(playCount),
+            '▶️ ', formatNumber(playCount),
           ]) : null,
         ].filter(Boolean)),
       ]);
@@ -213,7 +206,7 @@ export async function renderProfile(container, uid) {
   } catch (err) {
     store.set({ loading: false, error: err.message });
     mount(container, el('div', { class: 'empty-state' }, [
-      el('div', { class: 'empty-state-icon' }, [icon(ICONS.alertTriangle, 36)]),
+      el('div', { class: 'empty-state-icon' }, ['⚠️']),
       el('h3', {}, 'Failed to Load Profile'),
       el('p', {}, err.message),
       el('button', {
@@ -224,9 +217,16 @@ export async function renderProfile(container, uid) {
   }
 }
 
-function openAvatarPreview(avatarPath, username) {
-  if (!avatarPath) return;
-  const url = getMediaUrl(avatarPath);
+function openAvatarPreview(avatarList, username) {
+  if (!avatarList) return;
+  const rawList = Array.isArray(avatarList) ? avatarList : [avatarList];
+  if (!rawList.length) return;
+
+  const urls = rawList.map(item => (typeof item === 'string' && (item.startsWith('http://') || item.startsWith('https://'))) ? item : getMediaUrl(item));
+  if (!urls.length) return;
+
+  // Default ke avatar terbaru (indeks terakhir)
+  let idx = urls.length - 1;
   let backdrop = null;
 
   function closePreview() {
@@ -239,24 +239,121 @@ function openAvatarPreview(avatarPath, username) {
     }
   }
 
-  const img = el('img', { class: 'avatar-preview-img', alt: username });
-  loadCachedImage(url, 'avatar').then(dataUrl => { if (img.isConnected) img.src = dataUrl; });
+  function updateSlide() {
+    if (!backdrop) return;
+    const img = backdrop.querySelector('.avatar-preview-img');
+    const indicator = backdrop.querySelector('.avatar-preview-indicator');
+    const stripItems = backdrop.querySelectorAll('.avatar-preview-strip-item');
 
+    if (img) {
+      const url = urls[idx];
+      img.src = '';
+      loadCachedImage(url, 'avatar').then(dataUrl => {
+        if (img.isConnected && urls[idx] === url) {
+          img.src = dataUrl;
+        }
+      }).catch(() => {
+        if (img.isConnected) img.src = url;
+      });
+    }
+
+    if (indicator) {
+      const isLatest = idx === urls.length - 1;
+      indicator.textContent = urls.length > 1
+        ? `${idx + 1} / ${urls.length}${isLatest ? ' (Terbaru)' : ''}`
+        : 'Foto Profil';
+    }
+
+    stripItems.forEach((btn, i) => {
+      btn.classList.toggle('active', i === idx);
+    });
+  }
+
+  const img = el('img', { class: 'avatar-preview-img', alt: username });
+
+  let strip = null;
+  if (urls.length > 1) {
+    strip = el('div', { class: 'avatar-preview-strip' });
+    urls.forEach((url, i) => {
+      const thumb = el('img', { src: url, alt: '', loading: 'lazy' });
+      const btn = el('button', {
+        class: 'avatar-preview-strip-item' + (i === idx ? ' active' : ''),
+        onClick: (e) => { e.stopPropagation(); idx = i; updateSlide(); },
+      }, [thumb]);
+      strip.appendChild(btn);
+    });
+  }
+
+  const prevBtn = urls.length > 1 ? el('button', {
+    class: 'avatar-preview-nav prev',
+    onClick: (e) => {
+      e.stopPropagation();
+      idx = (idx - 1 + urls.length) % urls.length;
+      updateSlide();
+    },
+    'aria-label': 'Sebelumnya',
+  }, ['‹']) : null;
+
+  const nextBtn = urls.length > 1 ? el('button', {
+    class: 'avatar-preview-nav next',
+    onClick: (e) => {
+      e.stopPropagation();
+      idx = (idx + 1) % urls.length;
+      updateSlide();
+    },
+    'aria-label': 'Selanjutnya',
+  }, ['›']) : null;
+
+  const indicator = el('div', { class: 'avatar-preview-indicator' }, [
+    urls.length > 1 ? `${idx + 1} / ${urls.length} (Terbaru)` : 'Foto Profil'
+  ]);
+
+  let touchStartX = 0;
   backdrop = el('div', {
     class: 'avatar-preview-backdrop',
-    onClick: (e) => { if (e.target === backdrop) closePreview(); },
-    onKeydown: (e) => { if (e.key === 'Escape') closePreview(); },
+    onClick: (e) => {
+      if (e.target === backdrop || e.target.classList.contains('avatar-preview-img-wrap')) {
+        closePreview();
+      }
+    },
+    onKeydown: (e) => {
+      if (e.key === 'Escape') closePreview();
+      if (urls.length > 1) {
+        if (e.key === 'ArrowLeft') {
+          idx = (idx - 1 + urls.length) % urls.length;
+          updateSlide();
+        } else if (e.key === 'ArrowRight') {
+          idx = (idx + 1) % urls.length;
+          updateSlide();
+        }
+      }
+    },
+    onTouchstart: (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    },
+    onTouchend: (e) => {
+      const diff = e.changedTouches[0].screenX - touchStartX;
+      if (Math.abs(diff) > 40 && urls.length > 1) {
+        if (diff > 0) {
+          idx = (idx - 1 + urls.length) % urls.length;
+        } else {
+          idx = (idx + 1) % urls.length;
+        }
+        updateSlide();
+      }
+    },
     tabindex: '0',
   }, [
-    el('button', {
-      class: 'avatar-preview-close',
-      title: 'Close preview',
-      'aria-label': 'Close preview',
-      onClick: () => closePreview(),
-    }, [icon(ICONS.close, 18)]),
-    img,
-  ]);
+    el('button', { class: 'avatar-preview-close', onClick: () => closePreview() }, ['✕']),
+    indicator,
+    prevBtn,
+    el('div', { class: 'avatar-preview-img-wrap', style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' } }, [img]),
+    nextBtn,
+    strip,
+  ].filter(Boolean));
+
   document.body.appendChild(backdrop);
+  updateSlide();
   requestAnimationFrame(() => { backdrop.style.opacity = '1'; });
   backdrop.focus();
 }
