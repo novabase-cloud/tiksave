@@ -39,14 +39,14 @@ export async function renderProfile(container, uid) {
 
   try {
     const data = await listUserItems(uid);
-    const { items, metadata, avatarPath, avatarPaths, remoteAvatarUrl, userInfo } = data;
+    const { items, metadata, avatarPath, avatarPaths, remoteAvatarUrl, userInfo, userEntry } = data;
 
     store.set({ currentItems: items, loading: false });
 
     // Profile header
     const avatarUrl = avatarPath ? getMediaUrl(avatarPath) : (remoteAvatarUrl || null);
-    const displayName = userInfo?.uniqueId || userInfo?.unique_id || uid;
-    const nickname = userInfo?.nickname || '';
+    const displayName = userInfo?.uniqueId || userInfo?.unique_id || userEntry?.unique_id || uid;
+    const nickname = userInfo?.nickname || userEntry?.nickname || '';
     const following = userInfo?.followingCount;
     const followers = userInfo?.followerCount;
     const likes = userInfo?.diggCount || userInfo?.heartCount;

@@ -31,6 +31,9 @@ let renderGen = 0;
 let globalMuted = localStorage.getItem('newest-muted') !== 'false';
 let lastLoadTime = 0;
 let keydownHandler = null;
+let isJumping = false;
+let jumpTimeout = null;
+const loadedVideoIndices = new Set();
 
 function getBase() {
   const repo = getDatasetRepo() || 'Novabase/Tiktok';
@@ -231,13 +234,142 @@ function updateNavButtons() {
 function highlightActiveThumb() {
   if (!thumbGrid) return;
   thumbGrid.querySelectorAll('.newest2-thumb-item').forEach(item => {
-    item.classList.toggle('active', parseInt(item.dataset.index, 10) === activeItemIndex);
+    const isAct = parseInt(item.dataset.index, 10) === activeItemIndex;
+    item.classList.toggle('active', isAct);
+    if (isAct) {
+      item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
   });
+}
+
+function updateMediaWindow(activeIndex) {
+  if (!feedEl) return;
+
+  const windowIndices = new Set();
+  for (let offset = -1; offset <= 1; offset++) {
+    const idx = activeIndex + offset;
+    if (idx >= 0 && idx < items.length) {
+      windowIndices.add(idx);
+    }
+  }
+
+  // 1. Unload videos outside active window
+  for (const idx of Array.from(loadedVideoIndices)) {
+    if (!windowIndices.has(idx)) {
+      const slide = feedEl.querySelector(`.newest2-slide[data-index="${idx}"]`);
+      if (slide) {
+        const video = slide.querySelector('video');
+        if (video) {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+          const timeEl = slide.querySelector('.newest2-time-display');
+          const seekBar = slide.querySelector('.newest2-seek-bar');
+          if (timeEl) timeEl.textContent = '0:00 / 0:00';
+          if (seekBar) seekBar.value = '0';
+          const flashBtn = slide.querySelector('.newest2-play-flash');
+          const playBtnBottom = slide.querySelector('.newest2-play-btn-bottom');
+          if (flashBtn) {
+            flashBtn.innerHTML = PLAY_SVG_LG;
+            flashBtn.classList.add('newest2-play-flash-visible');
+          }
+          if (playBtnBottom) playBtnBottom.innerHTML = PLAY_SVG_SM;
+        }
+      }
+      loadedVideoIndices.delete(idx);
+    }
+  }
+
+  // 2. Load videos inside active window
+  for (const idx of windowIndices) {
+    const slide = feedEl.querySelector(`.newest2-slide[data-index="${idx}"]`);
+    if (!slide) continue;
+    const video = slide.querySelector('video');
+    if (!video) continue;
+
+    const targetSrc = video.dataset.src;
+    if (targetSrc && video.getAttribute('src') !== targetSrc) {
+      video.src = targetSrc;
+      video.preload = (idx === activeIndex) ? 'auto' : 'metadata';
+      video.load();
+    }
+
+    loadedVideoIndices.add(idx);
+
+    if (idx === activeIndex) {
+      video.muted = globalMuted;
+      video.play().catch(() => {});
+    } else {
+      if (!video.paused) video.pause();
+    }
+  }
+}
+
+function activateSlide(idx) {
+  if (idx < 0 || idx >= items.length) return;
+
+  const prevIdx = activeItemIndex;
+  activeItemIndex = idx;
+
+  if (prevIdx >= 0 && prevIdx !== idx) {
+    const prevSlide = feedEl?.querySelector(`.newest2-slide[data-index="${prevIdx}"]`);
+    if (prevSlide) {
+      prevSlide.classList.remove('active');
+      if (prevSlide.dataset.imgCount > 1) {
+        prevSlide.dataset.imgIdx = '0';
+        const img = prevSlide.querySelector('img');
+        if (img) {
+          const entry2 = items[prevIdx];
+          if (entry2) img.src = mediaUrl(entry2.uid, entry2.itemId, 'jpg', 0);
+        }
+        const ctr = prevSlide.querySelector('[data-counter]');
+        if (ctr) ctr.textContent = `1/${prevSlide.dataset.imgCount}`;
+      }
+    }
+  }
+
+  const curSlide = feedEl?.querySelector(`.newest2-slide[data-index="${idx}"]`);
+  if (curSlide) {
+    curSlide.classList.add('active');
+  }
+
+  updateMediaWindow(idx);
+
+  if (items[idx]) {
+    populateInfoPanel(items[idx]);
+  }
+  highlightActiveThumb();
+  updateNavButtons();
+  loadMoreIfNeeded();
 }
 
 function switchToItem(index) {
   if (!feedEl || index < 0 || index >= items.length) return;
-  feedEl.scrollTop = index * feedEl.clientHeight;
+  if (index === activeItemIndex) return;
+
+  isJumping = true;
+  if (jumpTimeout) clearTimeout(jumpTimeout);
+
+  pauseAllVideos();
+
+  const prevBehavior = feedEl.style.scrollBehavior;
+  feedEl.style.scrollBehavior = 'auto';
+
+  const targetSlide = feedEl.querySelector(`.newest2-slide[data-index="${index}"]`);
+  if (targetSlide) {
+    targetSlide.scrollIntoView({ behavior: 'instant', block: 'start' });
+  } else {
+    feedEl.scrollTop = index * feedEl.clientHeight;
+  }
+
+  feedEl.style.scrollBehavior = prevBehavior;
+
+  activateSlide(index);
+
+  jumpTimeout = setTimeout(() => {
+    isJumping = false;
+    jumpTimeout = null;
+  }, 100);
 }
 
 function buildMuteButton() {
@@ -287,6 +419,10 @@ function togglePlayVideo(index) {
   if (!slide) return;
   const video = slide.querySelector('video');
   if (!video) return;
+  if (!video.src && video.dataset.src) {
+    video.src = video.dataset.src;
+    video.load();
+  }
   if (video.paused) video.play().catch(() => {});
   else video.pause();
 }
@@ -306,7 +442,13 @@ function buildSlide(entry, index) {
 
   if (vid) {
     const src = mediaUrl(uid, itemId, 'mp4');
-    const video = el('video', { src, playsinline: true, muted: globalMuted, loop: true });
+    const video = el('video', {
+      'data-src': src,
+      playsinline: true,
+      muted: globalMuted,
+      loop: true,
+      preload: 'none',
+    });
     video.addEventListener('error', (e) => {
       console.warn('[newest] video failed to load:', src, e.type);
     });
@@ -409,7 +551,7 @@ function buildSlide(entry, index) {
     const imgWrap = el('div', { class: 'newest2-img-wrap' });
 
     const src0 = mediaUrl(uid, itemId, 'jpg', 0);
-    const img = el('img', { src: src0, alt: '', 'data-img-idx': '0' });
+    const img = el('img', { src: src0, alt: '', loading: 'lazy', 'data-img-idx': '0' });
     img.addEventListener('error', (e) => {
       console.warn('[newest] image failed to load:', src0, e.type);
     });
@@ -473,6 +615,7 @@ function navigateImage(slideIndex, dir) {
 function setupIntersectionObserver() {
   if (observer) observer.disconnect();
   observer = new IntersectionObserver((entries) => {
+    if (isJumping) return;
     let bestEntry = null;
     let bestRatio = 0;
     for (const entry of entries) {
@@ -484,47 +627,9 @@ function setupIntersectionObserver() {
     if (!bestEntry || bestRatio < 0.3) return;
     const slide = bestEntry.target;
     const idx = parseInt(slide.dataset.index, 10);
-    if (isNaN(idx)) return;
+    if (isNaN(idx) || idx === activeItemIndex) return;
 
-    feedEl.querySelectorAll('.newest2-slide').forEach(s => {
-      s.classList.remove('active');
-      if (s.dataset.imgCount > 1) {
-        s.dataset.imgIdx = '0';
-        const img = s.querySelector('img');
-        if (img) {
-          const entry2 = items[parseInt(s.dataset.index, 10)];
-          if (entry2) img.src = mediaUrl(entry2.uid, entry2.itemId, 'jpg', 0);
-        }
-        const ctr = s.querySelector('[data-counter]');
-        if (ctr) ctr.textContent = `1/${s.dataset.imgCount}`;
-      }
-    });
-    slide.classList.add('active');
-    if (slide.dataset.imgCount > 1) {
-      slide.dataset.imgIdx = '0';
-      const img = slide.querySelector('img');
-      if (img) {
-        const entry2 = items[idx];
-        if (entry2) img.src = mediaUrl(entry2.uid, entry2.itemId, 'jpg', 0);
-      }
-      const ctr = slide.querySelector('[data-counter]');
-      if (ctr) ctr.textContent = `1/${slide.dataset.imgCount}`;
-    }
-    activeItemIndex = idx;
-
-    const video = slide.querySelector('video');
-    feedEl.querySelectorAll('video').forEach(v => {
-      if (v !== video) v.pause();
-    });
-    if (video && video.src) {
-      video.muted = globalMuted;
-      video.play().catch(() => {});
-    }
-
-    populateInfoPanel(items[idx]);
-    highlightActiveThumb();
-    updateNavButtons();
-    loadMoreIfNeeded();
+    activateSlide(idx);
   }, { threshold: [0.3, 0.5, 0.7] });
 
   feedEl.querySelectorAll('.newest2-slide').forEach(s => observer.observe(s));
@@ -620,10 +725,7 @@ async function loadPage(p) {
     setupIntersectionObserver();
 
     if (wasEmpty && activeItemIndex === -1) {
-      activeItemIndex = 0;
-      populateInfoPanel(items[0]);
-      highlightActiveThumb();
-      updateNavButtons();
+      activateSlide(0);
     }
 
     page = p + 1;
@@ -705,6 +807,10 @@ export function resetNewestCache() {
   if (keydownHandler) document.removeEventListener('keydown', keydownHandler);
   if (observer) observer.disconnect();
   if (sentinelObserver) sentinelObserver.disconnect();
+  if (jumpTimeout) clearTimeout(jumpTimeout);
+  jumpTimeout = null;
+  isJumping = false;
+  loadedVideoIndices.clear();
   keydownHandler = null;
   observer = null;
   sentinelObserver = null;
@@ -773,16 +879,16 @@ function restoreCachedItems() {
     feedEl.appendChild(slide);
   });
 
-  if (activeItemIndex >= 0 && activeItemIndex < items.length) {
-    feedEl.scrollTop = activeItemIndex * feedEl.clientHeight;
-    populateInfoPanel(items[activeItemIndex]);
-    highlightActiveThumb();
-    updateNavButtons();
-  } else if (items.length > 0) {
-    activeItemIndex = 0;
-    populateInfoPanel(items[0]);
-    highlightActiveThumb();
-    updateNavButtons();
+  const targetIdx = (activeItemIndex >= 0 && activeItemIndex < items.length) ? activeItemIndex : (items.length > 0 ? 0 : -1);
+
+  if (targetIdx >= 0) {
+    const targetSlide = feedEl.querySelector(`.newest2-slide[data-index="${targetIdx}"]`);
+    if (targetSlide) {
+      targetSlide.scrollIntoView({ behavior: 'instant', block: 'start' });
+    } else {
+      feedEl.scrollTop = targetIdx * feedEl.clientHeight;
+    }
+    activateSlide(targetIdx);
   }
 
   if (observer) observer.disconnect();

@@ -30,13 +30,15 @@ export async function listUsers() {
   const data = await getUserList();
   if (!data.length) return [];
 
-  return data.map(u => ({
-    uid: u.uid,
-    username: u.unique_id,
-    nickname: u.nickname || u.unique_id,
-    avatar_path: u.avatar_path || null,
-    userInfo: null,
-  }));
+  return data
+    .filter(u => u && u.uid && /^\d+$/.test(u.uid) && u.uid !== '.appdata' && u.uid !== 'Following' && u.uid !== 'Posts')
+    .map(u => ({
+      uid: u.uid,
+      username: u.unique_id,
+      nickname: u.nickname || u.unique_id,
+      avatar_path: u.avatar_path || null,
+      userInfo: null,
+    }));
 }
 
 function extractItemsFromMediaIndex(prefix, mediaindex) {
@@ -139,6 +141,7 @@ export async function listUserItems(rawUid) {
     avatarPaths,
     remoteAvatarUrl,
     userInfo: infoResult.ok ? infoResult.data : null,
+    userEntry: matchedUser || null,
   };
 }
 
