@@ -191,7 +191,14 @@ function buildThumbnailItem(entry, index) {
       if (!dataUrl || renderGen !== myGen) return;
       const img = el('img', { src: dataUrl, alt: '', loading: 'lazy' });
       const existingLoader = item.querySelector('.newest2-thumb-loader');
-      if (existingLoader) existingLoader.remove();
+      img.onload = () => {
+        if (renderGen !== myGen) return;
+        if (existingLoader) existingLoader.remove();
+      };
+      img.onerror = () => {
+        if (renderGen !== myGen) return;
+        if (existingLoader) existingLoader.style.display = 'none';
+      };
       item.appendChild(img);
     });
   } else {

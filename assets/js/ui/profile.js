@@ -133,13 +133,13 @@ export async function renderProfile(container, uid) {
 
       let imgEl;
       if (isImage && thumbUrl) {
-        imgEl = el('img', { alt: item.itemId });
+        imgEl = el('img', { alt: '' });
       } else if (isVideo && thumbUrl) {
         const videoLoader = el('div', { class: 'post-card-video-loader' }, [
           el('span', { class: 'spinner' }),
         ]);
         imgEl = el('div', { class: 'post-card-video-thumb-wrap' }, [
-          el('img', { class: 'post-card-video-thumb', alt: item.itemId, style: { display: 'none' } }),
+          el('img', { class: 'post-card-video-thumb', alt: '', style: { display: 'none' } }),
           videoLoader,
         ]);
       } else {
@@ -191,9 +191,14 @@ export async function renderProfile(container, uid) {
             const vthumb = card.querySelector('.post-card-video-thumb');
             const loader = card.querySelector('.post-card-video-loader');
             if (thumbUrl2 && vthumb && card.isConnected) {
+              vthumb.onload = () => {
+                vthumb.style.display = '';
+                if (loader) loader.style.display = 'none';
+              };
+              vthumb.onerror = () => {
+                if (loader) loader.style.display = 'none';
+              };
               vthumb.src = thumbUrl2;
-              vthumb.style.display = '';
-              if (loader) loader.style.display = 'none';
             }
           });
         }
