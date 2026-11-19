@@ -6,7 +6,7 @@ const MAX_CACHE = 150;
 
 // ─── IndexedDB Persistent Local Memory for Avatars ──────────────────────────
 const DB_NAME = 'tiksave-local-cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const AVATAR_STORE = 'avatars';
 
 let _idbPromise = null;
@@ -19,9 +19,10 @@ function getIDB() {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains(AVATAR_STORE)) {
-          db.createObjectStore(AVATAR_STORE);
+        if (db.objectStoreNames.contains(AVATAR_STORE)) {
+          db.deleteObjectStore(AVATAR_STORE);
         }
+        db.createObjectStore(AVATAR_STORE);
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => {
@@ -180,11 +181,11 @@ export async function loadCachedImage(url, ns = 'img') {
   const baseUrl = qIdx === -1 ? hfUrl : hfUrl.slice(0, qIdx);
 
   const isAvatar = ns === 'avatar' || baseUrl.includes('/avatar/');
-  const avatarGenericKey = isAvatar ? `avatar:generic:${baseUrl}` : null;
+  const avatarFullKey = isAvatar ? `avatar:full:${baseUrl}` : null;
 
-  // Check persistent local memory (IndexedDB) for avatars first
-  if (isAvatar && avatarGenericKey) {
-    const localBlob = await getLocalAvatarBlob(avatarGenericKey);
+  // Check persistent local memory (IndexedDB) for full-size raw avatars first
+  if (isAvatar && avatarFullKey) {
+    const localBlob = await getLocalAvatarBlob(avatarFullKey);
     if (localBlob) {
       const objUrl = URL.createObjectURL(localBlob);
       cacheSet(key, objUrl);
@@ -197,9 +198,9 @@ export async function loadCachedImage(url, ns = 'img') {
     if (!resp.ok) return null;
     const blob = await resp.blob();
 
-    // Persist avatar to IndexedDB so future visits never make network requests
-    if (isAvatar && avatarGenericKey) {
-      setLocalAvatarBlob(avatarGenericKey, blob);
+    // Persist full-size raw avatar to IndexedDB so future visits never make network requests
+    if (isAvatar && avatarFullKey) {
+      setLocalAvatarBlob(avatarFullKey, blob);
     }
 
     const objUrl = URL.createObjectURL(blob);
@@ -224,13 +225,14 @@ export async function loadResizedImage(url, w = 150, q = 80) {
 
   const isAvatar = baseUrl.includes('/avatar/');
   const avatarStorageKey = isAvatar ? `avatar:${w}:${baseUrl}` : null;
-  const avatarGenericKey = isAvatar ? `avatar:generic:${baseUrl}` : null;
+  const avatarFullKey = isAvatar ? `avatar:full:${baseUrl}` : null;
 
   // 1. Check persistent local memory (IndexedDB) for avatars first
   if (isAvatar) {
     let localBlob = await getLocalAvatarBlob(avatarStorageKey);
-    if (!localBlob && avatarGenericKey) {
-      localBlob = await getLocalAvatarBlob(avatarGenericKey);
+    // If full-size raw avatar is already in local memory, use it directly (downscaling by browser)
+    if (!localBlob && avatarFullKey) {
+      localBlob = await getLocalAvatarBlob(avatarFullKey);
     }
     if (localBlob) {
       const objUrl = URL.createObjectURL(localBlob);
@@ -245,11 +247,10 @@ export async function loadResizedImage(url, w = 150, q = 80) {
     return u;
   }
 
-  // Helper to persist avatar once fetched
+  // Helper to persist resized avatar thumbnail ONLY to its sized key (never full key!)
   function saveToLocalMemory(blob) {
-    if (isAvatar && blob) {
+    if (isAvatar && blob && avatarStorageKey) {
       setLocalAvatarBlob(avatarStorageKey, blob);
-      setLocalAvatarBlob(avatarGenericKey, blob);
     }
   }
 
