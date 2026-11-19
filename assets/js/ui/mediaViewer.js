@@ -123,7 +123,7 @@ class MediaViewer {
     const myGen = this.renderGen;
 
     const mediaEl = item.type === 'video'
-      ? el('video', { src: item.url, controls: true, autoplay: true })
+      ? el('video', { src: item.url, controls: true, autoplay: true, crossOrigin: 'anonymous' })
       : this.buildCachedImage(item.url, item.name, myGen);
 
     const prevMedia = this.mediaIdx > 0

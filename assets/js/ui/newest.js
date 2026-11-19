@@ -291,6 +291,11 @@ function updateMediaWindow(activeIndex) {
             flashBtn.classList.add('newest2-play-flash-visible');
           }
           if (playBtnBottom) playBtnBottom.innerHTML = PLAY_SVG_SM;
+          const freezeImg = slide.querySelector('.newest2-freeze-frame');
+          if (freezeImg) {
+            freezeImg.style.display = 'none';
+            freezeImg.removeAttribute('src');
+          }
         }
       }
       loadedVideoIndices.delete(idx);
@@ -492,9 +497,15 @@ function buildSlide(entry, index) {
       muted: globalMuted,
       loop: true,
       preload: 'none',
+      crossOrigin: 'anonymous',
     });
     video.addEventListener('error', (e) => {
       console.warn('[newest] video failed to load:', src, e.type);
+    });
+
+    const freezeImg = el('img', {
+      class: 'newest2-freeze-frame',
+      alt: '',
     });
 
     const wrap = el('div', { class: 'newest2-video-wrap' });
@@ -509,6 +520,7 @@ function buildSlide(entry, index) {
     const controls = el('div', { class: 'newest2-video-controls' }, [bottomBar]);
 
     wrap.appendChild(video);
+    wrap.appendChild(freezeImg);
     wrap.appendChild(flashBtn);
 
     const overlayEl = buildOverlay(entry);
@@ -547,12 +559,30 @@ function buildSlide(entry, index) {
       flashBriefly();
     };
 
+    const updateFreezeFrame = () => {
+      if (video.paused && video.readyState >= 2 && video.videoWidth > 0) {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          freezeImg.src = canvas.toDataURL('image/png');
+          freezeImg.style.display = 'block';
+        } catch (err) {
+          console.warn('[newest] freeze frame capture failed:', err);
+        }
+      }
+    };
+
     video.addEventListener('loadedmetadata', () => {
       seekBar.max = String(video.duration || 0);
       syncTime();
     });
     video.addEventListener('timeupdate', syncTime);
     video.addEventListener('play', () => {
+      freezeImg.style.display = 'none';
+      freezeImg.removeAttribute('src');
       playBtnBottom.innerHTML = PAUSE_SVG_SM;
       flashBtn.innerHTML = PAUSE_SVG_LG;
       flashBtn.classList.remove('newest2-play-flash-visible');
@@ -564,7 +594,27 @@ function buildSlide(entry, index) {
       flashBtn.classList.add('newest2-play-flash-visible');
       if (hideTimer) clearTimeout(hideTimer);
       controls.classList.remove('newest2-controls-hidden');
+      updateFreezeFrame();
     });
+    video.addEventListener('seeked', () => {
+      if (video.paused) {
+        updateFreezeFrame();
+      }
+    });
+    video.addEventListener('loadeddata', () => {
+      if (video.paused) {
+        updateFreezeFrame();
+      }
+    });
+
+    freezeImg.addEventListener('click', (e) => {
+      if (e.button === 0) {
+        e.stopPropagation();
+        togglePlay();
+      }
+    });
+    freezeImg.addEventListener('mousemove', showControls);
+    freezeImg.addEventListener('touchstart', showControls, { passive: true });
 
     playBtnBottom.addEventListener('click', (e) => { e.stopPropagation(); togglePlay(); });
     seekBar.addEventListener('mousedown', () => { dragging = true; });
@@ -575,6 +625,11 @@ function buildSlide(entry, index) {
       updateVideoTimeDisplay(video, timeEl, seekBar);
     });
 
+    wrap.addEventListener('contextmenu', () => {
+      if (video.paused && freezeImg.style.display !== 'block') {
+        updateFreezeFrame();
+      }
+    });
     wrap.addEventListener('click', (e) => {
       if (e.target === wrap || e.target === video || e.target === controls) togglePlay();
     });
