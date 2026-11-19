@@ -2,7 +2,7 @@ import { el, icon, clear, mount } from '../utils/dom.js';
 import { listUsers, fetchUserAvatarUrl } from '../api.js';
 import { store } from '../store.js';
 import { isDark, toggleTheme } from '../utils/theme.js';
-import { themeIcon, ICONS } from '../utils/icons.js?v=20261120_1';
+import { themeIcon, ICONS } from '../utils/icons.js?v=20261120_2';
 import { loadResizedImage } from '../utils/cache.js';
 
 const BATCH = 30;
@@ -245,6 +245,15 @@ export async function initSidebar(container) {
     }
   });
 
+  const homeBtn = el('a', {
+    class: 'sidebar-theme-btn',
+    href: '#/',
+    onClick: () => closeSidebar(),
+  }, [
+    icon(ICONS.home, 16),
+    el('span', {}, 'Home'),
+  ]);
+
   const newestBtn = el('a', {
     class: 'sidebar-theme-btn',
     href: '#/newest',
@@ -254,10 +263,20 @@ export async function initSidebar(container) {
     el('span', {}, 'Newest'),
   ]);
 
+  function updateNavActive() {
+    const hash = window.location.hash || '#/';
+    const isNewest = hash.startsWith('#/newest');
+    const isHome = hash === '' || hash === '#' || hash === '#/' || hash === '#/users';
+    newestBtn.classList.toggle('active', isNewest);
+    homeBtn.classList.toggle('active', isHome);
+  }
+  window.addEventListener('hashchange', updateNavActive);
+  updateNavActive();
+
   userListEl = el('div', { class: 'sidebar-user-list' });
   sidebarEl.appendChild(headerRow);
   sidebarEl.appendChild(searchBar);
-  sidebarEl.appendChild(el('div', { class: 'sidebar-footer' }, [newestBtn]));
+  sidebarEl.appendChild(el('div', { class: 'sidebar-footer' }, [homeBtn, newestBtn]));
   sidebarEl.appendChild(el('div', { class: 'sidebar-footer-sep' }));
   sidebarEl.appendChild(userListEl);
 
