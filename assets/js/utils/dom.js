@@ -62,6 +62,12 @@ export function icon(path, size = 18) {
   svg.setAttribute('stroke-width', '2');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
-  svg.innerHTML = path;
+  if (path.includes('<')) {
+    svg.innerHTML = path;
+  } else {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', path);
+    svg.appendChild(p);
+  }
   return svg;
 }

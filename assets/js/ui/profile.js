@@ -5,6 +5,7 @@ import { openMediaViewer } from './mediaViewer.js?v=20261120_1';
 import { generateVideoThumbnail } from '../utils/thumbUtils.js';
 import { loadResizedImage, loadCachedImage } from '../utils/cache.js';
 import { formatNumber } from '../utils/format.js';
+import { ICONS } from '../utils/icons.js?v=20261120_1';
 
 const PLAY_ICON = '<polygon points="5 3 19 12 5 21 5 3"/>';
 
@@ -101,7 +102,7 @@ export async function renderProfile(container, uid) {
 
     if (!items.length) {
       container.appendChild(el('div', { class: 'empty-state' }, [
-        el('div', { class: 'empty-state-icon' }, ['📸']),
+        el('div', { class: 'empty-state-icon' }, [icon(ICONS.camera, 40)]),
         el('h3', {}, 'No Posts Yet'),
         el('p', {}, 'This user has no archived content.'),
       ]));
@@ -160,10 +161,12 @@ export async function renderProfile(container, uid) {
         isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(PLAY_ICON, 14)]) : null,
         el('div', { class: 'post-card-stats' }, [
           diggCount != null ? el('span', { class: 'post-card-stat' }, [
-            '❤️ ', formatNumber(diggCount),
+            icon(ICONS.heart, 11),
+            el('span', {}, formatNumber(diggCount)),
           ]) : null,
           playCount != null ? el('span', { class: 'post-card-stat' }, [
-            '▶️ ', formatNumber(playCount),
+            icon(ICONS.play, 11),
+            el('span', {}, formatNumber(playCount)),
           ]) : null,
         ].filter(Boolean)),
       ]);
@@ -212,7 +215,7 @@ export async function renderProfile(container, uid) {
   } catch (err) {
     store.set({ loading: false, error: err.message });
     mount(container, el('div', { class: 'empty-state' }, [
-      el('div', { class: 'empty-state-icon' }, ['⚠️']),
+      el('div', { class: 'empty-state-icon' }, [icon(ICONS.alertTriangle, 40)]),
       el('h3', {}, 'Failed to Load Profile'),
       el('p', {}, err.message),
       el('button', {
@@ -298,7 +301,7 @@ function openAvatarPreview(avatarList, username) {
       updateSlide();
     },
     'aria-label': 'Sebelumnya',
-  }, ['‹']) : null;
+  }, [icon(ICONS.chevronLeft, 22)]) : null;
 
   const nextBtn = urls.length > 1 ? el('button', {
     class: 'avatar-preview-nav next',
@@ -308,7 +311,7 @@ function openAvatarPreview(avatarList, username) {
       updateSlide();
     },
     'aria-label': 'Selanjutnya',
-  }, ['›']) : null;
+  }, [icon(ICONS.chevronRight, 22)]) : null;
 
   const indicator = el('div', { class: 'avatar-preview-indicator' }, [
     urls.length > 1 ? `${idx + 1} / ${urls.length} (Terbaru)` : 'Foto Profil'
@@ -350,7 +353,7 @@ function openAvatarPreview(avatarList, username) {
     },
     tabindex: '0',
   }, [
-    el('button', { class: 'avatar-preview-close', onClick: () => closePreview() }, ['✕']),
+    el('button', { class: 'avatar-preview-close', 'aria-label': 'Tutup preview', onClick: () => closePreview() }, [icon(ICONS.close, 18)]),
     indicator,
     prevBtn,
     el('div', { class: 'avatar-preview-img-wrap', style: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' } }, [img]),
