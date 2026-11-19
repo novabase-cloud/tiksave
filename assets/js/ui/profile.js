@@ -53,7 +53,8 @@ export async function renderProfile(container, uid) {
     const bio = userInfo?.signature || '';
     const isVerified = userInfo?.verified || userInfo?.isVerified || false;
 
-    const cachedAvatarSrc = avatarUrl ? await loadResizedImage(avatarUrl, 200) : null;
+    // Profile header (gunakan full-res loadCachedImage tanpa kompresi downscaling backend)
+    const cachedAvatarSrc = avatarUrl ? await loadCachedImage(avatarUrl, 'avatar') : null;
     const avatarImg = cachedAvatarSrc
       ? el('img', { class: 'profile-avatar', src: cachedAvatarSrc, alt: displayName, loading: 'lazy' })
       : avatarUrl
