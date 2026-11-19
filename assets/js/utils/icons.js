@@ -29,7 +29,7 @@ export const ICONS = {
   chevronUp: 'M18 15l-6-6-6 6',
   chevronDown: 'M6 9l6 6 6-6',
   chevronLeft: 'M15 18l-6-6 6-6',
-  chevronRight: 'M9 18l6-6 6 6',
+  chevronRight: 'M9 18l6-6-6-6',
   calendar: 'M3 9h18M3 9v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2M12 12v.01M8 12v.01M16 12v.01M12 16v.01M8 16v.01M16 16v.01',
   music: 'M9 18V5l12-2v13M9 18a3 3 0 0 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 0 1-6 0 3 3 0 0 1 6 0z',
   hash: 'M4 9h16M4 15h16M12 3v18',
