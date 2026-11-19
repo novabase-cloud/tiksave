@@ -6,7 +6,7 @@ import { STORAGE_KEYS } from './config.js';
 import { setOnUnauthorized } from './utils/http.js';
 import { clearUserListCache } from './api.js';
 import { initTheme, isDark, toggleTheme } from './utils/theme.js';
-import { themeIcon } from './utils/icons.js';
+import { themeIcon } from './utils/icons.js?v=20261120_1';
 import { cacheClear } from './utils/cache.js';
 import { initLogin, renderLogin } from './ui/login.js';
 import { renderUserList } from './ui/userList.js';

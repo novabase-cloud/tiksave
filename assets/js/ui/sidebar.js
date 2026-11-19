@@ -2,7 +2,7 @@ import { el, icon, clear, mount } from '../utils/dom.js';
 import { listUsers, fetchUserAvatarUrl } from '../api.js';
 import { store } from '../store.js';
 import { isDark, toggleTheme } from '../utils/theme.js';
-import { themeIcon, ICONS } from '../utils/icons.js';
+import { themeIcon, ICONS } from '../utils/icons.js?v=20261120_1';
 import { loadResizedImage } from '../utils/cache.js';
 
 const BATCH = 30;

@@ -1,7 +1,7 @@
 import { el, icon, clear, mount } from '../utils/dom.js';
 import { listUserItems, getItemThumbnail, getItemMediaFiles, getMediaUrl } from '../api.js';
 import { store } from '../store.js';
-import { openMediaViewer } from './mediaViewer.js';
+import { openMediaViewer } from './mediaViewer.js?v=20261120_1';
 import { generateVideoThumbnail } from '../utils/thumbUtils.js';
 import { loadResizedImage, loadCachedImage } from '../utils/cache.js';
 import { formatNumber } from '../utils/format.js';

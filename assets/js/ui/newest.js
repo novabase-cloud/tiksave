@@ -4,7 +4,7 @@ import { getToken } from '../auth.js';
 import { fetchJSON } from '../utils/http.js';
 import { navigate } from '../router.js';
 import { formatNumber } from '../utils/format.js';
-import { ICONS } from '../utils/icons.js';
+import { ICONS } from '../utils/icons.js?v=20261120_1';
 import { generateVideoThumbnail } from '../utils/thumbUtils.js';
 
 const PAGE_SIZE = 10;

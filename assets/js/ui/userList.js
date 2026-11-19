@@ -3,7 +3,7 @@ import { listUsers, fetchUserAvatarUrl } from '../api.js';
 import { store } from '../store.js';
 import { loadResizedImage } from '../utils/cache.js';
 import { getDatasetRepo } from '../config.js';
-import { ICONS } from '../utils/icons.js';
+import { ICONS } from '../utils/icons.js?v=20261120_1';
 
 export async function renderUserList(container) {
   clear(container);

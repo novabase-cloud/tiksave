@@ -1,7 +1,7 @@
 import { el, icon } from '../utils/dom.js';
 import { fetchPostDescription } from '../api.js';
 import { formatNumber } from '../utils/format.js';
-import { ICONS } from '../utils/icons.js';
+import { ICONS } from '../utils/icons.js?v=20261120_1';
 
 class MediaViewer {
   posts = [];
@@ -97,7 +97,13 @@ class MediaViewer {
         if (gen !== this.renderGen) return;
         img.src = objUrl;
         img.style.opacity = '1';
-      }).catch(() => { if (gen === this.renderGen) img.style.display = 'none'; });
+        img.dispatchEvent(new Event('load'));
+      }).catch(() => {
+        if (gen === this.renderGen) {
+          img.style.display = 'none';
+          img.dispatchEvent(new Event('error'));
+        }
+      });
     }
     return img;
   }
@@ -133,7 +139,26 @@ class MediaViewer {
       ? el('button', { class: 'media-viewer-nav-next', 'aria-label': 'Next media', onClick: () => { this.mediaIdx++; this.render(); } }, [icon(ICONS.chevronRight, 18)])
       : null;
 
+    const loader = el('div', { class: 'media-viewer-loader' }, [
+      el('span', { class: 'spinner', style: { width: '32px', height: '32px', borderWidth: '3px' } }),
+    ]);
+
+    const hideLoader = () => { loader.remove(); };
+    if (item.type === 'video') {
+      mediaEl.addEventListener('loadeddata', hideLoader, { once: true });
+      mediaEl.addEventListener('canplay', hideLoader, { once: true });
+      mediaEl.addEventListener('error', hideLoader, { once: true });
+    } else {
+      if (this.imageCache.has(item.url)) {
+        hideLoader();
+      } else {
+        mediaEl.addEventListener('load', hideLoader, { once: true });
+        mediaEl.addEventListener('error', hideLoader, { once: true });
+      }
+    }
+
     const mediaWrap = el('div', { class: 'media-viewer-media-wrap' }, [
+      loader,
       mediaEl,
       prevMedia, nextMedia,
     ].filter(Boolean));
