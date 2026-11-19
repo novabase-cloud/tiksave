@@ -199,6 +199,24 @@
   font-size: 14px;
 }
 
+.newest2-info-panel .media-info-link {
+  color: var(--color-primary);
+  text-decoration: underline;
+  word-break: break-all;
+  font-size: 12px;
+}
+
+.newest2-info-panel .media-info-row-author .media-info-value,
+.newest2-info-panel .media-info-row-uid .media-info-value {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.newest2-info-panel .media-info-row-item-id .media-info-value {
+  font-family: monospace;
+  font-size: 12px;
+}
+
 /* Mute button floats over moving video: glass separates it from the feed */
 .newest2-mute-btn {
   position: absolute;

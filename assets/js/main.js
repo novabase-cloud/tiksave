@@ -135,7 +135,7 @@ function handleRoute(path) {
   if (!main) return;
 
   const p = path.replace(/\/$/, '') || '/';
-  if (p !== 'newest') {
+  if (!p.startsWith('newest')) {
     destroyNewest();
   }
   main.classList.remove('newest-active');
@@ -146,8 +146,12 @@ function handleRoute(path) {
     renderProfile(main, p.slice(8));
     return;
   }
-  if (p === 'newest') {
-    renderNewest(main);
+  if (p === 'newest' || p.startsWith('newest/')) {
+    const parts = p.split('/');
+    const targetUid = parts[1] || null;
+    const targetItemId = parts[2] || null;
+    const target = targetUid && targetItemId ? { targetUid, targetItemId } : null;
+    renderNewest(main, target);
     return;
   }
 }

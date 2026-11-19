@@ -117,6 +117,10 @@ function infoLabel(svgPath, text) {
 
 function buildInfoPanel() {
   const rows = [
+    ['media-info-row-author', ICONS.users, 'author:'],
+    ['media-info-row-uid', ICONS.users, 'uid:'],
+    ['media-info-row-item-id', ICONS.fileText, 'item id:'],
+    ['media-info-row-tiktok-link', ICONS.externalLink, 'TikTok link:'],
     ['media-info-row-likes', ICONS.heart, 'likes:'],
     ['media-info-row-plays', ICONS.play, 'plays:'],
     ['media-info-row-comments', ICONS.messageCircle, 'comments:'],
@@ -126,7 +130,6 @@ function buildInfoPanel() {
     ['media-info-row-hashtags', ICONS.hash, 'hashtags:'],
     ['media-info-row-music', ICONS.music, 'music:'],
     ['media-info-row-posted', ICONS.calendar, 'posted:'],
-    ['media-info-row-author', ICONS.users, 'author:'],
   ];
 
   const children = rows.map(([cls, path, text]) =>
@@ -140,7 +143,7 @@ function buildInfoPanel() {
 }
 
 function populateInfoPanel(entry) {
-  const { descData, uid } = entry;
+  const { descData, uid, itemId } = entry;
   const stats = descData.stats || {};
   const desc = descData.desc || '';
   const challenges = descData.challenges || [];
@@ -157,7 +160,58 @@ function populateInfoPanel(entry) {
     const row = infoPanelEl?.querySelector(`.${cls} .media-info-value`);
     if (!row) return;
     row.textContent = val ?? '';
-    row.classList.remove('media-info-placeholder');
+    if (val != null && val !== '') {
+      row.classList.remove('media-info-placeholder');
+    } else {
+      row.classList.add('media-info-placeholder');
+    }
+  }
+
+  setVal('media-info-row-author', uniqueId ? `@${uniqueId}` : null);
+  setVal('media-info-row-uid', uid || null);
+  setVal('media-info-row-item-id', itemId || null);
+
+  const authorRow = infoPanelEl?.querySelector('.media-info-row-author .media-info-value');
+  if (authorRow && uid) {
+    authorRow.style.cursor = 'pointer';
+    authorRow.title = `View @${uniqueId}'s profile`;
+    authorRow.onclick = (e) => {
+      e.stopPropagation();
+      resetNewestCache();
+      navigate(`profile/${uid}`);
+    };
+  }
+
+  const uidRow = infoPanelEl?.querySelector('.media-info-row-uid .media-info-value');
+  if (uidRow && uid) {
+    uidRow.style.cursor = 'pointer';
+    uidRow.title = `View profile (${uid})`;
+    uidRow.onclick = (e) => {
+      e.stopPropagation();
+      resetNewestCache();
+      navigate(`profile/${uid}`);
+    };
+  }
+
+  const linkRow = infoPanelEl?.querySelector('.media-info-row-tiktok-link');
+  if (linkRow) {
+    const valEl = linkRow.querySelector('.media-info-value');
+    if (valEl) {
+      if (uniqueId && itemId) {
+        const tUrl = `https://www.tiktok.com/@${uniqueId}/video/${itemId}`;
+        valEl.innerHTML = '';
+        valEl.appendChild(el('a', {
+          class: 'media-info-link',
+          href: tUrl,
+          target: '_blank',
+          rel: 'noopener',
+        }, tUrl));
+        valEl.classList.remove('media-info-placeholder');
+      } else {
+        valEl.textContent = '';
+        valEl.classList.add('media-info-placeholder');
+      }
+    }
   }
 
   setVal('media-info-row-likes', stats.diggCount != null ? formatNumber(stats.diggCount) : null);
@@ -172,17 +226,6 @@ function populateInfoPanel(entry) {
     : null;
   setVal('media-info-row-music', musicStr);
   setVal('media-info-row-posted', dateStr || null);
-  setVal('media-info-row-author', uniqueId ? `@${uniqueId}` : null);
-  const authorRow = infoPanelEl?.querySelector('.media-info-row-author .media-info-value');
-  if (authorRow && uid) {
-    authorRow.style.cursor = 'pointer';
-    authorRow.title = `View @${uniqueId}'s profile`;
-    authorRow.onclick = (e) => {
-      e.stopPropagation();
-      resetNewestCache();
-      navigate(`profile/${uid}`);
-    };
-  }
 }
 
 function buildThumbnailItem(entry, index) {
@@ -374,6 +417,10 @@ function activateSlide(idx) {
   updateMediaWindow(idx);
 
   if (items[idx]) {
+    const { uid, itemId } = items[idx];
+    if (uid && itemId) {
+      window.history.replaceState(null, '', `#/newest/${uid}/${itemId}`);
+    }
     populateInfoPanel(items[idx]);
     preloadPostImages(items[idx]);
     if (items[idx + 1]) preloadPostImages(items[idx + 1]);
@@ -867,18 +914,22 @@ async function loadPage(p) {
       }).catch(() => null);
     }))).filter(Boolean);
 
-    if (!enriched.length) {
+    const existingItemIds = new Set(items.map(it => String(it.itemId)));
+    const enrichedUnique = enriched.filter(it => !existingItemIds.has(String(it.itemId)));
+
+    if (!enrichedUnique.length) {
       if (!items.length) { allDone = true; showEmpty('Could not load media details'); return; }
-      allDone = true; return;
+      if (!hasMore) allDone = true;
+      return;
     }
 
     const startIdx = items.length;
     const wasEmpty = !items.length;
-    items.push(...enriched);
+    items.push(...enrichedUnique);
 
-    renderThumbnailBatch(enriched, startIdx);
+    renderThumbnailBatch(enrichedUnique, startIdx);
 
-    enriched.forEach((entry, i) => {
+    enrichedUnique.forEach((entry, i) => {
       const slide = buildSlide(entry, startIdx + i);
       feedEl.appendChild(slide);
     });
@@ -895,6 +946,95 @@ async function loadPage(p) {
     if (!hasMore) allDone = true;
   } catch (err) {
     console.error('[newest] loadPage error:', err);
+    if (!items.length) showEmpty(`Failed to load: ${err.message}`);
+  } finally {
+    loading = false;
+  }
+}
+
+async function loadTargetAndPage(targetUid, targetItemId) {
+  if (loading || allDone) return;
+  loading = true;
+
+  try {
+    const targetPromise = fetchJSON(descUrl(targetUid, targetItemId))
+      .then(r => {
+        if (r.ok && r.data) return { descData: r.data, uid: targetUid, itemId: targetItemId };
+        return null;
+      })
+      .catch(() => null);
+
+    const recPromise = fetchJSON(recUrl(1)).catch(() => null);
+
+    const [targetEntry, recRes] = await Promise.all([targetPromise, recPromise]);
+
+    let recItems = [];
+    let hasMore = false;
+    if (recRes && recRes.ok && recRes.data) {
+      const raw = recRes.data;
+      if (Array.isArray(raw.data)) {
+        recItems = raw.data;
+        hasMore = raw.totalPages ? 1 < raw.totalPages : false;
+      } else {
+        let all;
+        if (Array.isArray(raw)) {
+          all = raw.map((entry, i) => ({ itemId: entry.itemId || i, ...entry }));
+        } else if (raw && typeof raw === 'object') {
+          all = Object.entries(raw).map(([itemId, entry]) => ({ itemId, ...entry }));
+        } else {
+          all = [];
+        }
+        all.sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
+        recItems = all.slice(0, PAGE_SIZE);
+        hasMore = PAGE_SIZE < all.length;
+      }
+    }
+
+    const filteredRecItems = recItems.filter(item => {
+      const iId = item.itemId || Object.keys(item)[0];
+      return String(iId) !== String(targetItemId);
+    });
+
+    const enrichedRec = (await Promise.all(filteredRecItems.map(item => {
+      const uid = item.uid;
+      const itemId = item.itemId || Object.keys(item)[0];
+      return fetchJSON(descUrl(uid, itemId)).then(r => {
+        if (r.ok && r.data) return { descData: r.data, uid, itemId };
+        return null;
+      }).catch(() => null);
+    }))).filter(Boolean);
+
+    const initialItems = [];
+    if (targetEntry) {
+      initialItems.push(targetEntry);
+    }
+    initialItems.push(...enrichedRec);
+
+    if (!initialItems.length) {
+      allDone = true;
+      showEmpty('Could not load media details');
+      return;
+    }
+
+    items.push(...initialItems);
+
+    renderThumbnailBatch(initialItems, 0);
+
+    initialItems.forEach((entry, i) => {
+      const slide = buildSlide(entry, i);
+      feedEl.appendChild(slide);
+    });
+
+    if (observer) observer.disconnect();
+    setupIntersectionObserver();
+
+    activateSlide(0);
+
+    page = 2;
+    lastLoadTime = Date.now();
+    if (!hasMore) allDone = true;
+  } catch (err) {
+    console.error('[newest] loadTargetAndPage error:', err);
     if (!items.length) showEmpty(`Failed to load: ${err.message}`);
   } finally {
     loading = false;
@@ -1081,7 +1221,7 @@ function restoreCachedItems() {
   setupIntersectionObserver();
 }
 
-export function renderNewest(containerEl) {
+export function renderNewest(containerEl, target = null) {
   container = containerEl;
   renderGen++;
   clear(container);
@@ -1118,8 +1258,24 @@ export function renderNewest(containerEl) {
   document.addEventListener('visibilitychange', visibilityHandler);
 
   if (isFresh) {
-    loadPage(1);
+    if (target && target.targetUid && target.targetItemId) {
+      loadTargetAndPage(target.targetUid, target.targetItemId);
+    } else {
+      loadPage(1);
+    }
   } else {
+    if (target && target.targetUid && target.targetItemId) {
+      const existingIdx = items.findIndex(it => String(it.uid) === String(target.targetUid) && String(it.itemId) === String(target.targetItemId));
+      if (existingIdx !== -1) {
+        activeItemIndex = existingIdx;
+        restoreCachedItems();
+        return;
+      } else {
+        resetNewestCache();
+        renderNewest(containerEl, target);
+        return;
+      }
+    }
     restoreCachedItems();
   }
 }
