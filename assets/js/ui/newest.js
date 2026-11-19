@@ -33,7 +33,23 @@ let lastLoadTime = 0;
 let keydownHandler = null;
 let isJumping = false;
 let jumpTimeout = null;
+let visibilityHandler = null;
 const loadedVideoIndices = new Set();
+const preloadedUrls = new Set();
+
+function preloadPostImages(entry) {
+  if (!entry || isVideo(entry.descData)) return;
+  const count = getImageCount(entry.descData);
+  if (count <= 1) return;
+  for (let i = 0; i < count; i++) {
+    const url = mediaUrl(entry.uid, entry.itemId, 'jpg', i);
+    if (!preloadedUrls.has(url)) {
+      preloadedUrls.add(url);
+      const pre = new Image();
+      pre.src = url;
+    }
+  }
+}
 
 function getBase() {
   const repo = getDatasetRepo() || 'Novabase/Tiktok';
@@ -359,6 +375,9 @@ function activateSlide(idx) {
 
   if (items[idx]) {
     populateInfoPanel(items[idx]);
+    preloadPostImages(items[idx]);
+    if (items[idx + 1]) preloadPostImages(items[idx + 1]);
+    if (items[idx + 2]) preloadPostImages(items[idx + 2]);
   }
   highlightActiveThumb();
   updateNavButtons();
@@ -1057,20 +1076,22 @@ export function renderNewest(containerEl) {
   if (keydownHandler) document.removeEventListener('keydown', keydownHandler);
   if (observer) observer.disconnect();
   if (sentinelObserver) sentinelObserver.disconnect();
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
   keydownHandler = null;
   observer = null;
   sentinelObserver = null;
+  visibilityHandler = null;
 
   buildLayout();
   container.appendChild(pageEl);
 
   setupKeydownHandler();
 
-  const onVisibilityChange = () => {
+  visibilityHandler = () => {
     if (document.hidden) pauseAllVideos();
     else resumeActiveVideo();
   };
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('visibilitychange', visibilityHandler);
 
   if (isFresh) {
     loadPage(1);

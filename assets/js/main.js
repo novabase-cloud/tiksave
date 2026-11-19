@@ -11,7 +11,7 @@ import { cacheClear } from './utils/cache.js';
 import { initLogin, renderLogin } from './ui/login.js';
 import { renderUserList } from './ui/userList.js';
 import { renderProfile, resetProfileQueue } from './ui/profile.js';
-import { renderNewest, resetNewestCache } from './ui/newest.js';
+import { renderNewest, resetNewestCache, destroyNewest } from './ui/newest.js';
 import { initSidebar, getSidebarToggleButton, closeSidebar } from './ui/sidebar.js';
 
 const root = $('#app');
@@ -133,9 +133,12 @@ function showApp() {
 function handleRoute(path) {
   const main = $('#app-main');
   if (!main) return;
-  main.classList.remove('newest-active');
 
   const p = path.replace(/\/$/, '') || '/';
+  if (p !== 'newest') {
+    destroyNewest();
+  }
+  main.classList.remove('newest-active');
 
   if (p === 'login') return;
   if (p === '' || p === '/') { renderUserList(main); return; }
