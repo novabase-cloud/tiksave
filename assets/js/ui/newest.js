@@ -7,7 +7,7 @@ import { formatNumber } from '../utils/format.js';
 import { ICONS } from '../utils/icons.js';
 import { generateVideoThumbnail } from '../utils/thumbUtils.js';
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 10;
 const MIN_LOAD_INTERVAL = 1500;
 
 let items = [];
@@ -930,11 +930,7 @@ export function renderNewest(containerEl) {
   document.addEventListener('visibilitychange', onVisibilityChange);
 
   if (isFresh) {
-    loadPage(1).then(() => {
-      if (!allDone && !loading) {
-        loadPage(2);
-      }
-    });
+    loadPage(1);
   } else {
     restoreCachedItems();
   }
