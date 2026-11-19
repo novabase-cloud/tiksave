@@ -62,7 +62,6 @@ export function icon(path, size = 18) {
   svg.setAttribute('stroke-width', '2');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
-  // Bare path data is wrapped so callers can pass either markup or a `d` string
-  svg.innerHTML = path.includes('<') ? path : `<path d="${path}"></path>`;
+  svg.innerHTML = path;
   return svg;
 }

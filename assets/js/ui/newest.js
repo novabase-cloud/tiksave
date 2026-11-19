@@ -640,6 +640,8 @@ function buildSlide(entry, index) {
   } else {
     const imgWrap = el('div', { class: 'newest2-img-wrap' });
 
+    preloadPostImages(entry);
+
     const src0 = mediaUrl(uid, itemId, 'jpg', 0);
     const img = el('img', { src: src0, alt: '', loading: 'lazy', 'data-img-idx': '0' });
     img.addEventListener('error', (e) => {
@@ -692,17 +694,41 @@ function navigateImage(slideIndex, dir) {
   const max = parseInt(slide.dataset.imgCount, 10);
   if (max <= 1) return;
   let cur = parseInt(slide.dataset.imgIdx, 10);
-  cur = Math.max(0, Math.min(max - 1, cur + dir));
+  const next = Math.max(0, Math.min(max - 1, cur + dir));
+  if (next === cur) return;
+  cur = next;
   slide.dataset.imgIdx = String(cur);
 
   const entry = items[slideIndex];
   if (!entry) return;
   const src = mediaUrl(entry.uid, entry.itemId, 'jpg', cur);
-  const img = slide.querySelector('img');
-  if (img) img.src = src;
+  const img = slide.querySelector('.newest2-img-wrap > img') || slide.querySelector('img');
+  if (img) {
+    const pre = new Image();
+    pre.src = src;
+    if (pre.complete) {
+      img.src = src;
+    } else {
+      pre.onload = () => {
+        if (parseInt(slide.dataset.imgIdx, 10) === cur) {
+          img.src = src;
+        }
+      };
+      img.src = src;
+    }
+  }
 
   const counter = slide.querySelector('[data-counter]');
   if (counter) counter.textContent = `${cur + 1}/${max}`;
+
+  if (cur + 1 < max) {
+    const n1 = mediaUrl(entry.uid, entry.itemId, 'jpg', cur + 1);
+    if (!preloadedUrls.has(n1)) {
+      preloadedUrls.add(n1);
+      const p = new Image();
+      p.src = n1;
+    }
+  }
 }
 
 function setupIntersectionObserver() {
@@ -896,17 +922,40 @@ function scrollToSlide(dir) {
   feedEl.scrollBy({ top: dir * vh, behavior: 'smooth' });
 }
 
+export function destroyNewest() {
+  pauseAllVideos();
+  if (feedEl) {
+    feedEl.querySelectorAll('video').forEach(v => {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+    });
+  }
+  if (keydownHandler) {
+    document.removeEventListener('keydown', keydownHandler);
+    keydownHandler = null;
+  }
+  if (visibilityHandler) {
+    document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
+  }
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+  if (sentinelObserver) {
+    sentinelObserver.disconnect();
+    sentinelObserver = null;
+  }
+}
+
 export function resetNewestCache() {
-  if (keydownHandler) document.removeEventListener('keydown', keydownHandler);
-  if (observer) observer.disconnect();
-  if (sentinelObserver) sentinelObserver.disconnect();
+  destroyNewest();
+  preloadedUrls.clear();
   if (jumpTimeout) clearTimeout(jumpTimeout);
   jumpTimeout = null;
   isJumping = false;
   loadedVideoIndices.clear();
-  keydownHandler = null;
-  observer = null;
-  sentinelObserver = null;
   renderGen++;
   items = [];
   page = 1;
@@ -925,6 +974,7 @@ export function resetNewestCache() {
 }
 
 function close() {
+  destroyNewest();
   resetNewestCache();
   navigate('/');
 }

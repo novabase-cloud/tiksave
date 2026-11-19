@@ -110,20 +110,20 @@ export async function listUserItems(rawUid) {
   let avatarPath = matchedUser?.avatar_path || null;
   let avatarPaths = matchedUser?.avatar_paths || (avatarPath ? [avatarPath] : []);
 
-  // Coba cek avatar/metadata.json jika avatarPaths belum terisi
-  if (!avatarPaths.length) {
-    const avMeta = await fetchJSON(resolveUrl(`${prefix}/avatar/metadata.json`));
-    if (avMeta.ok && Array.isArray(avMeta.data?.children)) {
-      const imgExts = ['.jpg', '.jpeg', '.png', '.webp'];
-      const found = avMeta.data.children
-        .filter(c => c.type === 'file' && imgExts.some(ext => c.path.toLowerCase().endsWith(ext)))
-        .map(c => c.path);
-      if (found.length) {
-        found.sort((a, b) => {
-          const vA = parseInt((a.match(/-(\d+)\.[^.]+$/) || [0, 0])[1], 10);
-          const vB = parseInt((b.match(/-(\d+)\.[^.]+$/) || [0, 0])[1], 10);
-          return vA - vB;
-        });
+  // Cek avatar/metadata.json untuk memastikan avatarPaths selalu terbarui
+  const avMeta = await fetchJSON(resolveUrl(`${prefix}/avatar/metadata.json`));
+  if (avMeta.ok && Array.isArray(avMeta.data?.children)) {
+    const imgExts = ['.jpg', '.jpeg', '.png', '.webp'];
+    const found = avMeta.data.children
+      .filter(c => c.type === 'file' && imgExts.some(ext => c.path.toLowerCase().endsWith(ext)))
+      .map(c => c.path);
+    if (found.length) {
+      found.sort((a, b) => {
+        const vA = parseInt((a.match(/-(\d+)\.[^.]+$/) || [0, 0])[1], 10);
+        const vB = parseInt((b.match(/-(\d+)\.[^.]+$/) || [0, 0])[1], 10);
+        return vA - vB;
+      });
+      if (found.length >= avatarPaths.length) {
         avatarPaths = found;
         avatarPath = found[found.length - 1];
       }
