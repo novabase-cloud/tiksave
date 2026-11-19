@@ -667,7 +667,12 @@ function buildSlide(entry, index) {
       console.warn('[newest] image failed to load:', src0, e.type);
     });
 
+    const loader = el('div', { class: 'newest2-img-loader' }, [
+      el('span', { class: 'spinner' }),
+    ]);
+
     imgWrap.appendChild(img);
+    imgWrap.appendChild(loader);
 
     if (imgCount > 1) {
       const prevBtn = el('button', {
@@ -718,27 +723,46 @@ function navigateImage(slideIndex, dir) {
   cur = next;
   slide.dataset.imgIdx = String(cur);
 
+  const counter = slide.querySelector('[data-counter]');
+  if (counter) counter.textContent = `${cur + 1}/${max}`;
+
   const entry = items[slideIndex];
   if (!entry) return;
   const src = mediaUrl(entry.uid, entry.itemId, 'jpg', cur);
   const img = slide.querySelector('.newest2-img-wrap > img') || slide.querySelector('img');
-  if (img) {
-    const pre = new Image();
-    pre.src = src;
-    if (pre.complete) {
-      img.src = src;
-    } else {
-      pre.onload = () => {
-        if (parseInt(slide.dataset.imgIdx, 10) === cur) {
-          img.src = src;
-        }
-      };
-      img.src = src;
-    }
-  }
+  const loader = slide.querySelector('.newest2-img-loader');
 
-  const counter = slide.querySelector('[data-counter]');
-  if (counter) counter.textContent = `${cur + 1}/${max}`;
+  if (loader) loader.classList.add('active');
+  if (img) img.style.opacity = '0.25';
+
+  const startTime = Date.now();
+  const applyImage = () => {
+    const elapsed = Date.now() - startTime;
+    const minDelay = 180;
+    const remaining = Math.max(0, minDelay - elapsed);
+    setTimeout(() => {
+      if (parseInt(slide.dataset.imgIdx, 10) === cur) {
+        if (img) {
+          img.src = src;
+          img.style.opacity = '1';
+        }
+        if (loader) loader.classList.remove('active');
+      }
+    }, remaining);
+  };
+
+  const pre = new Image();
+  pre.onload = applyImage;
+  pre.onerror = () => {
+    if (parseInt(slide.dataset.imgIdx, 10) === cur) {
+      if (img) {
+        img.src = src;
+        img.style.opacity = '1';
+      }
+      if (loader) loader.classList.remove('active');
+    }
+  };
+  pre.src = src;
 
   if (cur + 1 < max) {
     const n1 = mediaUrl(entry.uid, entry.itemId, 'jpg', cur + 1);
