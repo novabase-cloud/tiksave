@@ -31,10 +31,19 @@ a {
   text-decoration: none;
 }
 
+/* Every interactive element shows it can be used; disabled shows it cannot */
+a, button, [role="button"], label[for], summary, select,
+input[type="checkbox"], input[type="radio"], input[type="file"] {
+  cursor: pointer;
+}
+
+button:disabled, [aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
 button {
   font-family: inherit;
   font-size: inherit;
-  cursor: pointer;
   border: none;
   background: none;
   color: inherit;
@@ -46,7 +55,12 @@ input, select, textarea {
   color: inherit;
   background: transparent;
   border: none;
-  outline: none;
+}
+
+/* Visible keyboard focus everywhere (inputs included) */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 img, video {
@@ -103,18 +117,18 @@ code, pre {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-16px); }
+  from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.55; }
 }
 
 @keyframes spin {
@@ -131,16 +145,21 @@ code, pre {
   animation: spin 0.6s linear infinite;
 }
 
+/* ── Buttons ── */
 .btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
-  border-radius: var(--radius-lg);
-  font-weight: 500;
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
   font-size: 14px;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
   white-space: nowrap;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .btn:disabled {
@@ -150,7 +169,7 @@ code, pre {
 
 .btn-primary {
   background: var(--color-primary);
-  color: white;
+  color: var(--color-on-primary);
   border: 1px solid var(--color-primary);
 }
 
@@ -189,7 +208,7 @@ code, pre {
   height: 36px;
   border-radius: var(--radius-full);
   color: var(--color-text-muted);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
 }
 
 .btn-icon:hover {
@@ -197,6 +216,7 @@ code, pre {
   background: var(--color-bg-muted);
 }
 
+/* ── States ── */
 .loading-skeleton {
   background: var(--color-bg-muted);
   border-radius: var(--radius-md);
@@ -208,23 +228,42 @@ code, pre {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 72px 20px;
   text-align: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .empty-state-icon {
-  font-size: 48px;
-  opacity: 0.5;
+  color: var(--color-text-subtle);
+  margin-bottom: 6px;
+}
+
+.empty-state-icon svg {
+  width: 36px;
+  height: 36px;
+  stroke-width: 1.5;
 }
 
 .empty-state h3 {
-  font-size: 18px;
-  color: var(--color-text-muted);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .empty-state p {
-  font-size: 14px;
-  color: var(--color-text-subtle);
-  max-width: 400px;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+  max-width: 420px;
+}
+
+.empty-state .btn {
+  margin-top: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

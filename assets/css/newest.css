@@ -199,24 +199,6 @@
   font-size: 14px;
 }
 
-.newest2-info-panel .media-info-link {
-  color: var(--color-primary);
-  text-decoration: underline;
-  word-break: break-all;
-  font-size: 12px;
-}
-
-.newest2-info-panel .media-info-row-author .media-info-value,
-.newest2-info-panel .media-info-row-uid .media-info-value {
-  color: var(--color-primary);
-  text-decoration: underline;
-}
-
-.newest2-info-panel .media-info-row-item-id .media-info-value {
-  font-family: monospace;
-  font-size: 12px;
-}
-
 /* Mute button floats over moving video: glass separates it from the feed */
 .newest2-mute-btn {
   position: absolute;
@@ -345,34 +327,6 @@
   width: auto;
   height: auto;
   object-fit: contain;
-  transition: opacity 0.15s ease;
-}
-
-.newest2-img-loader {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  z-index: 3;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-
-.newest2-img-loader.active {
-  opacity: 1;
-}
-
-.newest2-img-loader .spinner {
-  width: 32px;
-  height: 32px;
-  border-width: 3px;
-  border-color: rgba(255, 255, 255, 0.25);
-  border-right-color: #fff;
 }
 
 .newest2-video-overlay {
