@@ -157,6 +157,16 @@ function populateInfoPanel(entry) {
   setVal('media-info-row-music', musicStr);
   setVal('media-info-row-posted', dateStr || null);
   setVal('media-info-row-author', uniqueId ? `@${uniqueId}` : null);
+  const authorRow = infoPanelEl?.querySelector('.media-info-row-author .media-info-value');
+  if (authorRow && uid) {
+    authorRow.style.cursor = 'pointer';
+    authorRow.title = `View @${uniqueId}'s profile`;
+    authorRow.onclick = (e) => {
+      e.stopPropagation();
+      resetNewestCache();
+      navigate(`profile/${uid}`);
+    };
+  }
 }
 
 function buildThumbnailItem(entry, index) {
@@ -433,6 +443,33 @@ function updateVideoTimeDisplay(video, timeEl, seekBar) {
   timeEl.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
 }
 
+function buildOverlay(entry) {
+  const { descData, uid } = entry;
+  const metaUser = descData.author?.uniqueId || descData.author?.unique_id || uid;
+  const dateStr = formatDateDDMMYY(descData.createTime);
+  const cap = (descData.desc || '').trim();
+
+  const userEl = el('a', {
+    class: 'newest2-video-overlay-user',
+    href: `#/profile/${uid}`,
+    title: `View @${metaUser}'s profile`,
+    onClick: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      resetNewestCache();
+      navigate(`profile/${uid}`);
+    },
+  }, [`@${metaUser}`]);
+
+  return el('div', { class: 'newest2-video-overlay' }, [
+    el('div', { class: 'newest2-video-overlay-meta' }, [
+      userEl,
+      el('span', { class: 'newest2-video-overlay-date' }, [` · ${dateStr}`]),
+    ]),
+    cap ? el('div', { class: 'newest2-video-overlay-caption' }, [cap]) : null,
+  ].filter(Boolean));
+}
+
 function buildSlide(entry, index) {
   const { descData, uid, itemId } = entry;
   const vid = isVideo(descData);
@@ -467,16 +504,7 @@ function buildSlide(entry, index) {
     wrap.appendChild(video);
     wrap.appendChild(flashBtn);
 
-    const metaUser = descData.author?.uniqueId || descData.author?.unique_id || uid;
-    const dateStr = formatDateDDMMYY(descData.createTime);
-    const cap = (descData.desc || '').trim();
-    const overlayEl = el('div', { class: 'newest2-video-overlay' }, [
-      el('div', { class: 'newest2-video-overlay-meta' }, [
-        el('span', { class: 'newest2-video-overlay-user' }, [`@${metaUser}`]),
-        el('span', { class: 'newest2-video-overlay-date' }, [` · ${dateStr}`]),
-      ]),
-      cap ? el('div', { class: 'newest2-video-overlay-caption' }, [cap]) : null,
-    ].filter(Boolean));
+    const overlayEl = buildOverlay(entry);
     wrap.appendChild(overlayEl);
 
     wrap.appendChild(controls);
@@ -579,6 +607,9 @@ function buildSlide(entry, index) {
       imgWrap.appendChild(nextBtn);
       imgWrap.appendChild(counter);
     }
+
+    const overlayEl = buildOverlay(entry);
+    imgWrap.appendChild(overlayEl);
 
     slideChildren = [imgWrap];
   }

@@ -328,6 +328,10 @@
   color: #fff;
 }
 
+.newest2-img-wrap .newest2-video-overlay {
+  bottom: 20px;
+}
+
 .newest2-video-overlay-meta {
   font-size: 16px;
   font-weight: 600;
@@ -337,6 +341,16 @@
 
 .newest2-video-overlay-user {
   font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: opacity 0.15s;
+}
+
+.newest2-video-overlay-user:hover {
+  text-decoration: underline;
+  opacity: 0.85;
 }
 
 .newest2-video-overlay-date {
