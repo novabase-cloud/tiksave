@@ -1,0 +1,31 @@
+[package]
+name = "tiksave-backend"
+version = "2.0.0"
+edition = "2021"
+description = "High-performance Rust backend for TikSave - ultra-fast image resizing, video thumbnail extraction, video preview transcoding, and proxy"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+moka = { version = "0.12", features = ["future"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+md-5 = "0.10"
+hex = "0.4"
+bytes = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures-util = "0.3"
+parking_lot = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

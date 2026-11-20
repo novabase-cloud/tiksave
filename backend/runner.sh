@@ -11,18 +11,34 @@ HEARTBEAT_INTERVAL=600 # 10 minutes
 MAX_LIFETIME_MINUTES="${MAX_LIFETIME_MINUTES:-300}" # 5 hours default
 
 # 1. Install dependencies & ensure ffmpeg
-echo "[1/4] Ensuring ffmpeg & installing backend dependencies..."
+echo "[1/4] Ensuring ffmpeg & backend dependencies..."
 if ! command -v ffmpeg &> /dev/null; then
   echo "Installing ffmpeg..."
   sudo apt-get update && sudo apt-get install -y ffmpeg
 fi
 cd "$(dirname "$0")"
-npm install --production
 
-# 2. Start Backend Server
-echo "[2/4] Starting Node.js server on port $PORT..."
-npm start &
-SERVER_PID=$!
+# 2. Start Backend Server (Rust preferred, Node.js fallback)
+SERVER_MODE="node"
+if [ -f "./target/release/tiksave-backend" ]; then
+  echo "[2/4] Starting ultra-fast Rust backend binary on port $PORT..."
+  PORT="$PORT" ./target/release/tiksave-backend &
+  SERVER_PID=$!
+  SERVER_MODE="rust"
+elif command -v cargo &> /dev/null; then
+  echo "[2/4] Building Rust backend with Cargo..."
+  cargo build --release
+  echo "Starting ultra-fast Rust backend on port $PORT..."
+  PORT="$PORT" ./target/release/tiksave-backend &
+  SERVER_PID=$!
+  SERVER_MODE="rust"
+else
+  echo "[2/4] Cargo not found, starting Node.js server on port $PORT..."
+  npm install --production
+  npm start &
+  SERVER_PID=$!
+  SERVER_MODE="node"
+fi
 
 # Wait for server to be healthy
 echo "Waiting for backend health check..."
@@ -91,8 +107,13 @@ while true; do
   if ! curl -s "http://127.0.0.1:$PORT/health" | grep -q '"status":"ok"'; then
     echo "WARNING: Backend server health check failed! Attempting restart..."
     kill $SERVER_PID 2>/dev/null || true
-    npm start &
-    SERVER_PID=$!
+    if [ "$SERVER_MODE" = "rust" ] && [ -f "./target/release/tiksave-backend" ]; then
+      PORT="$PORT" ./target/release/tiksave-backend &
+      SERVER_PID=$!
+    else
+      npm start &
+      SERVER_PID=$!
+    fi
     sleep 3
   fi
 

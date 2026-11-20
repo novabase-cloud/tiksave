@@ -4,5 +4,6 @@ node_modules/
 .env.*
 source/
 dist/
+target/
 .DS_Store
 Thumbs.db
