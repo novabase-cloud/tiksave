@@ -6,7 +6,7 @@ import { navigate } from '../router.js';
 import { formatNumber } from '../utils/format.js';
 import { ICONS } from '../utils/icons.js?v=20261120_1';
 import { generateVideoThumbnail, getVideoPreviewUrl } from '../utils/thumbUtils.js';
-import { invalidateBackendUrl } from '../utils/cache.js';
+import { getBackendUrl, invalidateBackendUrl } from '../utils/cache.js';
 
 const PAGE_SIZE = 10;
 const MIN_LOAD_INTERVAL = 1500;
@@ -27,6 +27,33 @@ let muteBtn = null;
 let sentinelEl = null;
 let sentinelObserver = null;
 let observer = null;
+let thumbObserver = null;
+const MAX_CONCURRENT_THUMBS = 2;
+let thumbPending = 0;
+const thumbQueue = [];
+
+function processThumbQueue() {
+  while (thumbPending < MAX_CONCURRENT_THUMBS && thumbQueue.length > 0) {
+    const next = thumbQueue.shift();
+    thumbPending++;
+    next().finally(() => {
+      thumbPending--;
+      processThumbQueue();
+    });
+  }
+}
+
+function enqueueThumb(fn) {
+  return new Promise((resolve, reject) => {
+    thumbQueue.push(() => fn().then(resolve, reject));
+    processThumbQueue();
+  });
+}
+
+function resetThumbQueue() {
+  thumbQueue.length = 0;
+  thumbPending = 0;
+}
 let activeItemIndex = -1;
 let renderGen = 0;
 let globalMuted = localStorage.getItem('newest-muted') !== 'false';
@@ -60,7 +87,7 @@ function getBase() {
 function recUrl(p) {
   const token = getToken();
   let url = `${HF_MEDIA_PROXY}/recommendation?_t=${Date.now()}`;
-  url += `&page=${p}&limit=${PAGE_SIZE}&sort=newest`;
+  url += `&page=${p}&limit=${PAGE_SIZE}&sort=newest&enrich=true`;
   if (token) url += `&token=${encodeURIComponent(token)}`;
   return url;
 }
@@ -71,6 +98,75 @@ function descUrl(uid, itemId) {
   let u = `${base}/Posts/${uid}/${itemId}/description.json`;
   if (token) u += `?token=${encodeURIComponent(token)}`;
   return u;
+}
+
+async function fetchBatchDescriptions(itemsToFetch) {
+  if (!itemsToFetch || !itemsToFetch.length) return [];
+  const token = getToken();
+  const repo = getDatasetRepo() || 'Novabase/Tiktok';
+  const payload = {
+    repo,
+    token: token || undefined,
+    items: itemsToFetch.map(x => ({ uid: x.uid, itemId: x.itemId })),
+  };
+
+  // 1. Try active Rust runner backend first (via Teller)
+  let backend = await getBackendUrl();
+  if (backend) {
+    try {
+      const resp = await fetch(`${backend}/api/batch-descriptions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json && json.ok && Array.isArray(json.data) && json.data.length > 0) {
+          return json.data;
+        }
+      }
+    } catch (err) {
+      console.warn('[newest] Rust backend batch-descriptions failed, trying worker:', err);
+    }
+  }
+
+  // 2. Try Cloudflare Worker batch endpoint
+  try {
+    const resp = await fetch(`${HF_MEDIA_PROXY}/batch-descriptions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json && json.ok && Array.isArray(json.data) && json.data.length > 0) {
+        return json.data;
+      }
+    }
+  } catch (err) {
+    console.warn('[newest] Cloudflare worker batch-descriptions failed, using fallback:', err);
+  }
+
+  // 3. Fallback: parallel individual requests
+  const fallback = await Promise.all(
+    itemsToFetch.map(item => {
+      const uid = item.uid;
+      const itemId = item.itemId;
+      return fetchJSON(descUrl(uid, itemId))
+        .then(r => {
+          if (r.ok && r.data) return { descData: r.data, uid, itemId };
+          return null;
+        })
+        .catch(() => null);
+    })
+  );
+  return fallback.filter(Boolean);
 }
 
 function mediaUrl(uid, itemId, ext, index = 0) {
@@ -1003,15 +1099,22 @@ async function loadPage(p) {
       return;
     }
 
-    const enriched = (await Promise.all(itemsData.map(item => {
+    const enriched = [];
+    const missing = [];
+    for (const item of itemsData) {
       const uid = item.uid;
       const itemId = item.itemId || Object.keys(item)[0];
-      return fetchJSON(descUrl(uid, itemId)).then(r => {
-        if (r.ok && r.data) return { descData: r.data, uid, itemId };
-        console.warn('[newest] failed to fetch description for', uid, itemId, r.status);
-        return null;
-      }).catch(() => null);
-    }))).filter(Boolean);
+      if (item.descData) {
+        enriched.push({ descData: item.descData, uid, itemId });
+      } else {
+        missing.push({ uid, itemId });
+      }
+    }
+
+    if (missing.length > 0) {
+      const fetched = await fetchBatchDescriptions(missing);
+      enriched.push(...fetched);
+    }
 
     const existingItemIds = new Set(items.map(it => String(it.itemId)));
     const enrichedUnique = enriched.filter(it => !existingItemIds.has(String(it.itemId)));
@@ -1056,16 +1159,7 @@ async function loadTargetAndPage(targetUid, targetItemId) {
   loading = true;
 
   try {
-    const targetPromise = fetchJSON(descUrl(targetUid, targetItemId))
-      .then(r => {
-        if (r.ok && r.data) return { descData: r.data, uid: targetUid, itemId: targetItemId };
-        return null;
-      })
-      .catch(() => null);
-
-    const recPromise = fetchJSON(recUrl(1)).catch(() => null);
-
-    const [targetEntry, recRes] = await Promise.all([targetPromise, recPromise]);
+    const recRes = await fetchJSON(recUrl(1)).catch(() => null);
 
     let recItems = [];
     let hasMore = false;
@@ -1094,20 +1188,29 @@ async function loadTargetAndPage(targetUid, targetItemId) {
       return String(iId) !== String(targetItemId);
     });
 
-    const enrichedRec = (await Promise.all(filteredRecItems.map(item => {
+    const initialItems = [];
+    const toBatchFetch = [{ uid: targetUid, itemId: targetItemId }];
+
+    for (const item of filteredRecItems) {
       const uid = item.uid;
       const itemId = item.itemId || Object.keys(item)[0];
-      return fetchJSON(descUrl(uid, itemId)).then(r => {
-        if (r.ok && r.data) return { descData: r.data, uid, itemId };
-        return null;
-      }).catch(() => null);
-    }))).filter(Boolean);
-
-    const initialItems = [];
-    if (targetEntry) {
-      initialItems.push(targetEntry);
+      if (item.descData) {
+        initialItems.push({ descData: item.descData, uid, itemId });
+      } else {
+        toBatchFetch.push({ uid, itemId });
+      }
     }
-    initialItems.push(...enrichedRec);
+
+    if (toBatchFetch.length > 0) {
+      const fetched = await fetchBatchDescriptions(toBatchFetch);
+      for (const entry of fetched) {
+        if (String(entry.itemId) === String(targetItemId)) {
+          initialItems.unshift(entry);
+        } else {
+          initialItems.push(entry);
+        }
+      }
+    }
 
     if (!initialItems.length) {
       allDone = true;

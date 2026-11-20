@@ -40,6 +40,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/video-thumb", get(handlers::video_thumb))
         .route("/api/video-preview", get(handlers::video_preview))
         .route("/api/proxy", get(handlers::proxy))
+        .route(
+            "/api/batch-descriptions",
+            get(handlers::batch_descriptions_get).post(handlers::batch_descriptions_post),
+        )
+        .route(
+            "/batch-descriptions",
+            get(handlers::batch_descriptions_get).post(handlers::batch_descriptions_post),
+        )
         .layer(cors)
         .with_state(state);
 

@@ -35,6 +35,43 @@ pub struct ProxyQuery {
     pub token: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct BatchItem {
+    pub uid: String,
+    #[serde(rename = "itemId")]
+    pub item_id: Option<String>,
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BatchDescriptionsPayload {
+    pub repo: Option<String>,
+    pub token: Option<String>,
+    pub items: Option<Vec<BatchItem>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BatchDescriptionsQuery {
+    pub repo: Option<String>,
+    pub token: Option<String>,
+    pub items: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BatchResultItem {
+    pub uid: String,
+    #[serde(rename = "itemId")]
+    pub item_id: String,
+    #[serde(rename = "descData")]
+    pub desc_data: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BatchDescriptionsResponse {
+    pub ok: bool,
+    pub data: Vec<BatchResultItem>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub status: &'static str,

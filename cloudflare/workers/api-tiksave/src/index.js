@@ -1,5 +1,5 @@
 import { handleProxy } from "./proxy.js";
-import { handleRecommendation } from "./recommendation.js";
+import { handleRecommendation, handleBatchDescriptions } from "./recommendation.js";
 import { handleFileTree } from "./filetree.js";
 import { handleTeller } from "./teller.js";
 import { corsHeaders } from "../utils/cors.js";
@@ -25,9 +25,14 @@ export default {
       return handleProxy(request, url);
     }
 
-    // /recommendation → recommendation handler
+    // /recommendation → recommendation handler (supports ?enrich=true)
     if (path === "/recommendation" || path.startsWith("/recommendation/")) {
       return handleRecommendation(request, url, ctx);
+    }
+
+    // /batch-descriptions → batch description packer
+    if (path === "/batch-descriptions" || path.startsWith("/batch-descriptions/")) {
+      return handleBatchDescriptions(request, url, ctx);
     }
 
     // /filetree/* → recursive file tree lister
@@ -41,7 +46,13 @@ export default {
       JSON.stringify({
         error: "Unknown section",
         message: `No handler for path: ${path}`,
-        sections: ["/teller", "/proxy/*", "/recommendation", "/filetree/*"],
+        sections: [
+          "/teller",
+          "/proxy/*",
+          "/recommendation",
+          "/batch-descriptions",
+          "/filetree/*",
+        ],
       }),
       {
         status: 404,

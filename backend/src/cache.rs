@@ -21,6 +21,7 @@ pub struct AppState {
     pub client: reqwest::Client,
     pub no_redirect_client: reqwest::Client,
     pub image_cache: Cache<String, CachedMedia>,
+    pub desc_cache: Cache<String, serde_json::Value>,
     pub preview_inflight: Arc<Mutex<HashMap<String, broadcast::Sender<Result<PathBuf, String>>>>>,
     pub preview_cache_dir: PathBuf,
     pub start_time: Instant,
@@ -46,6 +47,11 @@ impl AppState {
             .time_to_live(Duration::from_secs(86400))
             .build();
 
+        let desc_cache = Cache::builder()
+            .max_capacity(5000)
+            .time_to_live(Duration::from_secs(3600))
+            .build();
+
         if !preview_cache_dir.exists() {
             let _ = fs::create_dir_all(&preview_cache_dir);
         }
@@ -54,6 +60,7 @@ impl AppState {
             client,
             no_redirect_client,
             image_cache,
+            desc_cache,
             preview_inflight: Arc::new(Mutex::new(HashMap::new())),
             preview_cache_dir,
             start_time: Instant::now(),

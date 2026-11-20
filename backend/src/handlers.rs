@@ -5,8 +5,9 @@ use crate::{
         clamp_quality, clamp_width, is_video_url, parse_target_format, resize_and_encode_image,
     },
     models::{
-        ErrorResponse, HealthResponse, ProxyQuery, ResizeQuery, RootResponse, VideoPreviewQuery,
-        VideoThumbQuery,
+        BatchDescriptionsPayload, BatchDescriptionsQuery, BatchDescriptionsResponse, BatchItem,
+        BatchResultItem, ErrorResponse, HealthResponse, ProxyQuery, ResizeQuery, RootResponse,
+        VideoPreviewQuery, VideoThumbQuery,
     },
 };
 use axum::{
@@ -103,6 +104,7 @@ pub async fn root() -> Json<RootResponse> {
             "/api/video-thumb",
             "/api/video-preview",
             "/api/proxy",
+            "/api/batch-descriptions",
         ],
     })
 }
@@ -619,4 +621,139 @@ pub async fn proxy(
     let body = Body::from_stream(upstream.bytes_stream());
 
     (status, resp_headers, body).into_response()
+}
+
+pub async fn batch_descriptions_post(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(payload): Json<BatchDescriptionsPayload>,
+) -> Response {
+    let repo = payload.repo.unwrap_or_else(|| "Novabase/Tiktok".to_string());
+    let token = extract_token(payload.token.as_deref(), &headers);
+    let items = payload.items.unwrap_or_default();
+
+    handle_batch_descriptions_internal(state, repo, token, items).await
+}
+
+pub async fn batch_descriptions_get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<BatchDescriptionsQuery>,
+) -> Response {
+    let repo = query.repo.unwrap_or_else(|| "Novabase/Tiktok".to_string());
+    let token = extract_token(query.token.as_deref(), &headers);
+    let mut items = Vec::new();
+    if let Some(raw) = query.items {
+        for part in raw.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            let (uid, item_id) = if let Some((u, i)) = part.split_once(':') {
+                (u.trim().to_string(), i.trim().to_string())
+            } else if let Some((u, i)) = part.split_once('/') {
+                (u.trim().to_string(), i.trim().to_string())
+            } else {
+                continue;
+            };
+            if !uid.is_empty() && !item_id.is_empty() {
+                items.push(BatchItem {
+                    uid,
+                    item_id: Some(item_id),
+                    id: None,
+                });
+            }
+        }
+    }
+
+    handle_batch_descriptions_internal(state, repo, token, items).await
+}
+
+async fn handle_batch_descriptions_internal(
+    state: Arc<AppState>,
+    repo: String,
+    token: Option<String>,
+    items: Vec<BatchItem>,
+) -> Response {
+    if items.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Missing or empty items list".to_string(),
+                message: None,
+            }),
+        )
+            .into_response();
+    }
+
+    let futures = items.into_iter().filter_map(|it| {
+        let uid = it.uid;
+        let item_id = it.item_id.or(it.id)?;
+        if uid.is_empty() || item_id.is_empty() {
+            return None;
+        }
+        let state = Arc::clone(&state);
+        let repo = repo.clone();
+        let token = token.clone();
+        Some(async move {
+            let cache_key = format!("desc::{repo}::{uid}::{item_id}");
+            if let Some(cached) = state.desc_cache.get(&cache_key).await {
+                return Some(BatchResultItem {
+                    uid,
+                    item_id,
+                    desc_data: cached,
+                });
+            }
+
+            let raw_url = format!(
+                "https://huggingface.co/datasets/{repo}/resolve/main/Posts/{uid}/{item_id}/description.json"
+            );
+            let direct_url =
+                resolve_direct_media_url(&state.no_redirect_client, &raw_url, token.as_deref())
+                    .await;
+
+            let mut req = state.client.get(&direct_url).header(
+                header::USER_AGENT,
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            );
+            if direct_url.starts_with("https://huggingface.co") {
+                if let Some(ref t) = token {
+                    req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
+                }
+            }
+
+            if let Ok(resp) = req.send().await {
+                if resp.status().is_success() {
+                    if let Ok(val) = resp.json::<serde_json::Value>().await {
+                        state.desc_cache.insert(cache_key, val.clone()).await;
+                        return Some(BatchResultItem {
+                            uid,
+                            item_id,
+                            desc_data: val,
+                        });
+                    }
+                }
+            }
+            None
+        })
+    });
+
+    let results: Vec<BatchResultItem> = futures_util::future::join_all(futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+
+    (
+        StatusCode::OK,
+        [
+            (header::CACHE_CONTROL, "public, max-age=600"),
+            (HeaderName::from_static("x-cache"), "BATCH"),
+        ],
+        Json(BatchDescriptionsResponse {
+            ok: true,
+            data: results,
+        }),
+    )
+        .into_response()
 }

@@ -39,7 +39,9 @@ async function fetchCached(dataUrl, headers, ctx) {
       "Cache-Control": `public, max-age=${CACHE_TTL}`,
     },
   });
-  ctx.waitUntil(cache.put(key, cached));
+  if (ctx && ctx.waitUntil) {
+    ctx.waitUntil(cache.put(key, cached));
+  }
   return data;
 }
 
@@ -62,6 +64,11 @@ async function resolveUsername(token) {
   } catch {
     return null;
   }
+}
+
+async function fetchDescription(repo, uid, itemId, headers, ctx) {
+  const dataUrl = `${HF_BASE}/datasets/${repo}/resolve/main/Posts/${uid}/${itemId}/description.json`;
+  return fetchCached(dataUrl, headers, ctx);
 }
 
 function sortEntries(entries, sort) {
@@ -133,6 +140,11 @@ export async function handleRecommendation(request, url, ctx) {
 
   if (hasSort) entries = sortEntries(entries, params.get("sort"));
 
+  const shouldEnrich =
+    params.get("enrich") === "true" ||
+    params.get("enrich") === "1" ||
+    params.get("desc") === "true";
+
   if (hasPage) {
     const limit = Math.min(
       parseInt(params.get("limit")) || DEFAULT_LIMIT,
@@ -141,6 +153,23 @@ export async function handleRecommendation(request, url, ctx) {
     const page = Math.max(1, parseInt(params.get("page")) || 1);
     const total = entries.length;
     const sliced = entries.slice((page - 1) * limit, page * limit);
+
+    // If enrich requested, pack description.json into each entry directly on the edge
+    if (shouldEnrich && sliced.length > 0) {
+      await Promise.all(
+        sliced.map(async (entry) => {
+          const uid = entry.uid;
+          const itemId = entry.itemId;
+          if (uid && itemId) {
+            try {
+              const desc = await fetchDescription(repo, uid, itemId, headers, ctx);
+              if (desc) entry.descData = desc;
+            } catch {}
+          }
+        })
+      );
+    }
+
     return json({
       data: sliced,
       page,
@@ -150,4 +179,77 @@ export async function handleRecommendation(request, url, ctx) {
   }
 
   return json({ data: entries, total: entries.length });
+}
+
+// Handler for packing arbitrary description.json requests into a single batch response
+export async function handleBatchDescriptions(request, url, ctx) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { headers: cors() });
+  }
+
+  let items = [];
+  let token = url.searchParams.get("token") || null;
+  let customRepo = url.searchParams.get("repo") || null;
+
+  if (request.method === "POST") {
+    try {
+      const body = await request.json();
+      if (Array.isArray(body)) {
+        items = body;
+      } else if (body && Array.isArray(body.items)) {
+        items = body.items;
+        if (!token && body.token) token = body.token;
+        if (!customRepo && body.repo) customRepo = body.repo;
+      }
+    } catch {}
+  } else if (request.method === "GET") {
+    const rawItems = url.searchParams.get("items");
+    if (rawItems) {
+      items = rawItems
+        .split(",")
+        .map((part) => {
+          const [uid, itemId] = part.includes(":")
+            ? part.split(":")
+            : part.split("/");
+          return { uid: uid?.trim(), itemId: itemId?.trim() };
+        })
+        .filter((x) => x.uid && x.itemId);
+    }
+  }
+
+  if (!items.length) {
+    return json({ ok: false, error: "Missing or empty items list" }, 400);
+  }
+
+  const authHeader = request.headers.get("Authorization");
+  if (!token && authHeader) {
+    const m = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (m) token = m[1];
+  }
+
+  const username = await resolveUsername(token);
+  const repo = customRepo || `${username || "Novabase"}/Tiktok`;
+
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const results = await Promise.all(
+    items.map(async (item) => {
+      const uid = item.uid;
+      const itemId = item.itemId || item.id;
+      if (!uid || !itemId) return null;
+      try {
+        const descData = await fetchDescription(repo, uid, itemId, headers, ctx);
+        if (descData) {
+          return { uid, itemId, descData };
+        }
+      } catch {}
+      return null;
+    })
+  );
+
+  return json({
+    ok: true,
+    data: results.filter(Boolean),
+  });
 }
