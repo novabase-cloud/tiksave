@@ -334,6 +334,26 @@
   opacity: 0.6;
 }
 
+.post-card-music-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  z-index: 2;
+  transition: opacity 0.2s ease;
+}
+
+.post-card:hover .post-card-music-indicator {
+  opacity: 0.6;
+}
+
 .post-card-video-thumb-wrap {
   position: relative;
   width: 100%;
@@ -557,6 +577,92 @@
   border-radius: var(--radius-full);
   white-space: nowrap;
   margin-top: 8px;
+}
+
+/* ── Media Viewer Background Music Badge ── */
+.media-viewer-music-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(22, 24, 35, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  color: #fff;
+  font-size: 13px;
+  margin-top: 8px;
+  max-width: 85%;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.media-viewer-music-badge:hover {
+  background: rgba(22, 24, 35, 0.9);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.media-viewer-music-badge.hidden {
+  display: none !important;
+}
+
+.media-viewer-music-badge .music-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+  color: var(--accent, #fe2c55);
+}
+
+.music-icon-spin {
+  animation: musicDiscSpin 4s linear infinite;
+}
+
+.music-icon-paused {
+  animation: musicDiscSpin 4s linear infinite;
+  animation-play-state: paused;
+}
+
+@keyframes musicDiscSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.media-viewer-music-badge .music-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 500;
+  max-width: 220px;
+}
+
+.media-viewer-music-badge .music-toggle-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.media-viewer-music-badge .music-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* ── Preview strip (fixed at bottom) ── */

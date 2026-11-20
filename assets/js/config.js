@@ -38,6 +38,7 @@ export function getDatasetRepo() {
 
 export const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif'];
 export const VIDEO_EXTS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v', 'ogv'];
+export const AUDIO_EXTS = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
 
 // Vercel Image Resizer — POST binary → return thumbnail
 export const IMAGE_RESIZER = 'https://image-resizer-sable.vercel.app';

@@ -1,7 +1,7 @@
 import { el, icon, clear, mount } from '../utils/dom.js';
-import { listUserItems, getItemThumbnail, getItemMediaFiles, getMediaUrl } from '../api.js';
+import { listUserItems, getItemThumbnail, getItemMediaFiles, getItemAudio, getMediaUrl } from '../api.js';
 import { store } from '../store.js';
-import { openMediaViewer } from './mediaViewer.js?v=20261120_1';
+import { openMediaViewer } from './mediaViewer.js?v=20261120_5';
 import { generateVideoThumbnail, getVideoPreviewUrl } from '../utils/thumbUtils.js';
 import { loadResizedImage, loadCachedImage, invalidateBackendUrl } from '../utils/cache.js';
 import { formatNumber } from '../utils/format.js';
@@ -124,6 +124,7 @@ export async function renderProfile(container, uid, targetItemId = null) {
     for (const [postIdx, item] of items.entries()) {
       const thumbUrl = getItemThumbnail(item);
       const mediaFiles = getItemMediaFiles(item);
+      const audioInfo = getItemAudio(item);
       const isVideo = item.files.some(f => ['mp4', 'webm', 'mov'].includes(f.ext));
       const isImage = item.files.some(f => ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(f.ext));
       const stats = item.stats || {};
@@ -136,6 +137,7 @@ export async function renderProfile(container, uid, targetItemId = null) {
         media: mediaFiles,
         files: item.files,
         isVideo,
+        audio: audioInfo,
         description: item.description,
         stats: item.stats,
         desc: item.desc,
@@ -170,6 +172,7 @@ export async function renderProfile(container, uid, targetItemId = null) {
       }, [
         imgEl,
         isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(PLAY_ICON, 14)]) : null,
+        !isVideo && audioInfo ? el('div', { class: 'post-card-music-indicator', title: 'Foto dengan musik' }, [icon(ICONS.music, 12)]) : null,
         el('div', { class: 'post-card-stats' }, [
           diggCount != null ? el('span', { class: 'post-card-stat' }, [
             icon(ICONS.heart, 11),

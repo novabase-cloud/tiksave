@@ -1,5 +1,5 @@
 import { el, icon } from '../utils/dom.js';
-import { fetchPostDescription } from '../api.js';
+import { fetchPostDescription, getMediaUrl } from '../api.js';
 import { formatNumber } from '../utils/format.js';
 import { ICONS } from '../utils/icons.js?v=20261120_1';
 
@@ -14,6 +14,10 @@ class MediaViewer {
   pendingFetches = new Map();
   descCache = new Map();
   keydownHandler = null;
+  audioEl = null;
+  isAudioPlaying = false;
+  currentAudioUrl = null;
+  musicBadgeEl = null;
 
   infoLabel(svgPath, text) {
     const svg = icon(svgPath, 12);
@@ -66,6 +70,15 @@ class MediaViewer {
     this.postIdx = 0;
     this.mediaIdx = 0;
     this.profileInfo = null;
+    if (this.audioEl) {
+      this.audioEl.pause();
+      this.audioEl.removeAttribute('src');
+      this.audioEl.load();
+      this.audioEl = null;
+    }
+    this.currentAudioUrl = null;
+    this.isAudioPlaying = false;
+    this.musicBadgeEl = null;
     this.imageCache.forEach(url => URL.revokeObjectURL(url));
     this.imageCache.clear();
     this.pendingFetches.clear();
@@ -186,6 +199,39 @@ class MediaViewer {
       `Post ${this.postIdx + 1}/${totalPosts} \u00B7 Media ${this.mediaIdx + 1}/${totalMedia}`,
     ]);
 
+    let musicBadge = null;
+    if (!post?.isVideo) {
+      const audioUrl = this.getPostAudioUrl(post);
+      const descData = post?.path ? this.descCache.get(post.path) : null;
+      const music = descData?.music || {};
+      const musicTitle = music.title || (post?.audio?.name ? post.audio.name : 'Musik Postingan');
+      const musicAuthor = music.authorName || '';
+      const displayTitle = (musicAuthor ? `${musicAuthor} · ` : '') + musicTitle;
+
+      musicBadge = el('div', {
+        class: 'media-viewer-music-badge' + (audioUrl ? '' : ' hidden'),
+        title: 'Klik untuk memutar / menjeda musik latar',
+        onClick: (e) => {
+          e.stopPropagation();
+          this.toggleAudio();
+        },
+      }, [
+        el('span', { class: 'music-icon-wrap' + (this.isAudioPlaying ? ' music-icon-spin' : ' music-icon-paused') }, [
+          icon(ICONS.music, 13),
+        ]),
+        el('span', { class: 'music-title' }, displayTitle),
+        el('button', {
+          class: 'music-toggle-btn',
+          'aria-label': 'Toggle musik latar',
+        }, [
+          icon(this.isAudioPlaying ? ICONS.pause : ICONS.play, 11),
+        ]),
+      ]);
+      this.musicBadgeEl = musicBadge;
+    } else {
+      this.musicBadgeEl = null;
+    }
+
     let strip = null;
     if (totalMedia > 1) {
       strip = el('div', { class: 'media-viewer-strip' });
@@ -274,7 +320,8 @@ class MediaViewer {
         el('div', { class: 'media-viewer-center' }, [
           content,
           counter,
-        ]),
+          musicBadge,
+        ].filter(Boolean)),
       ]),
       infoPanel,
     ]);
@@ -320,6 +367,107 @@ class MediaViewer {
           this.loadImage(m.url).catch(() => {});
         }
       });
+    }
+
+    this.syncAudioForPost(post);
+  }
+
+  getPostAudioUrl(post) {
+    if (post?.audio?.url) return post.audio.url;
+    if (Array.isArray(post?.files)) {
+      const audioF = post.files.find(f => ['mp3', 'm4a', 'wav', 'aac', 'ogg'].includes(f.ext) || (f.name && f.name.includes('-music.')));
+      if (audioF) return getMediaUrl(audioF.path);
+    }
+    const cached = post?.path ? this.descCache.get(post.path) : null;
+    const playUrl = cached?.music?.playUrl || cached?.music?.play_url;
+    if (playUrl) return playUrl;
+    return null;
+  }
+
+  syncAudioForPost(post) {
+    if (!post || post.isVideo) {
+      if (this.audioEl) {
+        this.audioEl.pause();
+        this.isAudioPlaying = false;
+        this.updateMusicBadge();
+      }
+      return;
+    }
+
+    const audioUrl = this.getPostAudioUrl(post);
+    if (!audioUrl) {
+      if (this.audioEl) {
+        this.audioEl.pause();
+        this.isAudioPlaying = false;
+        this.updateMusicBadge();
+      }
+      return;
+    }
+
+    if (this.currentAudioUrl !== audioUrl) {
+      if (!this.audioEl) {
+        this.audioEl = new Audio();
+        this.audioEl.loop = true;
+      }
+      this.audioEl.src = audioUrl;
+      this.currentAudioUrl = audioUrl;
+      this.audioEl.play().then(() => {
+        this.isAudioPlaying = true;
+        this.updateMusicBadge();
+      }).catch(() => {
+        this.isAudioPlaying = false;
+        this.updateMusicBadge();
+      });
+    } else if (this.audioEl && this.audioEl.paused && this.isAudioPlaying) {
+      this.audioEl.play().catch(() => {});
+    }
+    this.updateMusicBadge();
+  }
+
+  toggleAudio() {
+    const post = this.posts[this.postIdx];
+    if (!post || post.isVideo) return;
+
+    if (!this.audioEl) {
+      const audioUrl = this.getPostAudioUrl(post);
+      if (audioUrl) {
+        this.audioEl = new Audio(audioUrl);
+        this.audioEl.loop = true;
+        this.currentAudioUrl = audioUrl;
+      }
+    }
+    if (!this.audioEl) return;
+
+    if (this.audioEl.paused) {
+      this.audioEl.play().then(() => {
+        this.isAudioPlaying = true;
+        this.updateMusicBadge();
+      }).catch(() => {});
+    } else {
+      this.audioEl.pause();
+      this.isAudioPlaying = false;
+      this.updateMusicBadge();
+    }
+  }
+
+  updateMusicBadge() {
+    if (!this.musicBadgeEl) return;
+    const post = this.posts[this.postIdx];
+    const audioUrl = this.getPostAudioUrl(post);
+    if (!audioUrl || post?.isVideo) {
+      this.musicBadgeEl.classList.add('hidden');
+      return;
+    }
+    this.musicBadgeEl.classList.remove('hidden');
+
+    const iconWrap = this.musicBadgeEl.querySelector('.music-icon-wrap');
+    if (iconWrap) {
+      iconWrap.className = 'music-icon-wrap' + (this.isAudioPlaying ? ' music-icon-spin' : ' music-icon-paused');
+    }
+
+    const btn = this.musicBadgeEl.querySelector('.music-toggle-btn');
+    if (btn) {
+      btn.replaceChildren(icon(this.isAudioPlaying ? ICONS.pause : ICONS.play, 11));
     }
   }
 
@@ -372,6 +520,15 @@ class MediaViewer {
       : '';
     this.setRowValue('media-info-row-music', musicStr);
 
+    if (this.musicBadgeEl && musicStr) {
+      const titleSpan = this.musicBadgeEl.querySelector('.music-title');
+      if (titleSpan) titleSpan.textContent = musicStr;
+    }
+
+    if (!post?.isVideo && !this.currentAudioUrl && (music.playUrl || music.play_url)) {
+      this.syncAudioForPost(post);
+    }
+
     if (dateStr && !existing) {
       this.setRowValue('media-info-row-posted-desc', dateStr);
     }
@@ -395,6 +552,11 @@ class MediaViewer {
 
   handleKeydown(e) {
     if (e.key === 'Escape') { this.close(); return; }
+    if ((e.code === 'Space' || e.key === ' ') && !this.posts[this.postIdx]?.isVideo) {
+      e.preventDefault();
+      this.toggleAudio();
+      return;
+    }
     if (e.key === 'ArrowUp' && this.postIdx > 0) { e.preventDefault(); this.postIdx--; this.mediaIdx = 0; this.render(); return; }
     if (e.key === 'ArrowDown' && this.postIdx < this.posts.length - 1) { e.preventDefault(); this.postIdx++; this.mediaIdx = 0; this.render(); return; }
     const totalMedia = this.posts[this.postIdx]?.media?.length || 1;

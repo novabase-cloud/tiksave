@@ -1,4 +1,4 @@
-import { HF_API, HF_MEDIA_PROXY, getDatasetRepo, IMAGE_EXTS, VIDEO_EXTS } from './config.js';
+import { HF_API, HF_MEDIA_PROXY, getDatasetRepo, IMAGE_EXTS, VIDEO_EXTS, AUDIO_EXTS } from './config.js';
 import { fetchJSON } from './utils/http.js';
 import { getToken } from './auth.js';
 
@@ -46,7 +46,8 @@ function extractItemsFromMediaIndex(prefix, mediaindex) {
   const map = new Map();
   const allMedia = [
     ...Object.values(mediaindex.videos || {}),
-    ...Object.values(mediaindex.images || {})
+    ...Object.values(mediaindex.images || {}),
+    ...Object.values(mediaindex.music || {}),
   ];
   for (const m of allMedia) {
     const itemId = m.itemId || m.item_id;
@@ -58,7 +59,7 @@ function extractItemsFromMediaIndex(prefix, mediaindex) {
         files: [],
       });
     }
-    const name = m.fileName || m.filename || `${itemId}-${m.index || 0}.mp4`;
+    const name = m.fileName || m.filename || (m.index === 'music' ? `${itemId}-music.mp3` : `${itemId}-${m.index || 0}.mp4`);
     const ext = name.split('.').pop().toLowerCase();
     map.get(itemId).files.push({
       name,
@@ -181,4 +182,18 @@ export function getItemMediaFiles(item) {
     }
   }
   return media.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function getItemAudio(item) {
+  if (!item || !Array.isArray(item.files)) return null;
+  const audioFile = item.files.find(f => AUDIO_EXTS.includes(f.ext) || (f.name && f.name.includes('-music.')));
+  if (audioFile) {
+    return {
+      url: getMediaUrl(audioFile.path),
+      name: audioFile.name,
+      ext: audioFile.ext,
+      size: audioFile.size || 0,
+    };
+  }
+  return null;
 }
