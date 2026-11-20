@@ -414,10 +414,39 @@ function buildThumbnailItem(entry, index) {
       }
     });
 
-    generateVideoThumbnail(src, 160).then(dataUrl => {
-      if (!dataUrl || renderGen !== myGen) return;
-      const img = el('img', { src: dataUrl, alt: '', loading: 'lazy' });
-      const hideVideoThumbLoader = () => {
+    item._loadThumb = () => {
+      if (!item.isConnected || renderGen !== myGen) return;
+      enqueueThumb(() => generateVideoThumbnail(src, 160)).then(dataUrl => {
+        if (!dataUrl || renderGen !== myGen || !item.isConnected) return;
+        const img = el('img', { src: dataUrl, alt: '', loading: 'lazy' });
+        const hideVideoThumbLoader = () => {
+          if (renderGen !== myGen) return;
+          const existingLoader = item.querySelector('.newest2-thumb-loader');
+          if (existingLoader) {
+            existingLoader.style.display = 'none';
+            existingLoader.remove();
+          }
+        };
+        if (img.complete && img.naturalWidth > 0) {
+          hideVideoThumbLoader();
+        } else {
+          img.onload = hideVideoThumbLoader;
+          img.onerror = hideVideoThumbLoader;
+        }
+        item.appendChild(img);
+      }).catch(() => {
+        const existingLoader = item.querySelector('.newest2-thumb-loader');
+        if (existingLoader) {
+          existingLoader.style.display = 'none';
+          existingLoader.remove();
+        }
+      });
+    };
+  } else {
+    item._loadThumb = () => {
+      if (!item.isConnected || renderGen !== myGen) return;
+      const img = el('img', { src, alt: '', loading: 'lazy' });
+      const hideImgThumbLoader = () => {
         if (renderGen !== myGen) return;
         const existingLoader = item.querySelector('.newest2-thumb-loader');
         if (existingLoader) {
@@ -426,30 +455,13 @@ function buildThumbnailItem(entry, index) {
         }
       };
       if (img.complete && img.naturalWidth > 0) {
-        hideVideoThumbLoader();
+        hideImgThumbLoader();
       } else {
-        img.onload = hideVideoThumbLoader;
-        img.onerror = hideVideoThumbLoader;
+        img.onload = hideImgThumbLoader;
+        img.onerror = hideImgThumbLoader;
       }
       item.appendChild(img);
-    });
-  } else {
-    const img = el('img', { src, alt: '', loading: 'lazy' });
-    const hideImgThumbLoader = () => {
-      if (renderGen !== myGen) return;
-      const existingLoader = item.querySelector('.newest2-thumb-loader');
-      if (existingLoader) {
-        existingLoader.style.display = 'none';
-        existingLoader.remove();
-      }
     };
-    if (img.complete && img.naturalWidth > 0) {
-      hideImgThumbLoader();
-    } else {
-      img.onload = hideImgThumbLoader;
-      img.onerror = hideImgThumbLoader;
-    }
-    item.appendChild(img);
   }
 
   return item;
@@ -465,6 +477,12 @@ function renderThumbnailBatch(batch, startIdx) {
   batch.forEach((entry, i) => {
     const item = buildThumbnailItem(entry, startIdx + i);
     thumbGrid.appendChild(item);
+    if (thumbObserver) {
+      thumbObserver.observe(item);
+    } else if (item._loadThumb) {
+      item._loadThumb();
+      item._loadThumb = null;
+    }
   });
 
   sentinelEl = el('div', { class: 'newest2-thumb-sentinel' });
@@ -1284,6 +1302,19 @@ function buildLayout() {
   thumbGrid = el('div', { class: 'newest2-thumb-grid' });
   thumbContainer.appendChild(thumbGrid);
 
+  if (thumbObserver) thumbObserver.disconnect();
+  thumbObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const itemEl = entry.target;
+      thumbObserver.unobserve(itemEl);
+      if (itemEl._loadThumb) {
+        itemEl._loadThumb();
+        itemEl._loadThumb = null;
+      }
+    }
+  }, { root: thumbContainer, rootMargin: '250px' });
+
   feedEl = el('div', { class: 'newest2-feed' });
 
   muteBtn = buildMuteButton();
@@ -1332,6 +1363,11 @@ export function destroyNewest() {
     sentinelObserver.disconnect();
     sentinelObserver = null;
   }
+  if (thumbObserver) {
+    thumbObserver.disconnect();
+    thumbObserver = null;
+  }
+  resetThumbQueue();
 }
 
 export function resetNewestCache() {
@@ -1388,6 +1424,12 @@ function restoreCachedItems() {
   for (let i = 0; i < items.length; i++) {
     const thumb = buildThumbnailItem(items[i], i);
     thumbGrid.appendChild(thumb);
+    if (thumbObserver) {
+      thumbObserver.observe(thumb);
+    } else if (thumb._loadThumb) {
+      thumb._loadThumb();
+      thumb._loadThumb = null;
+    }
   }
 
   if (!allDone && items.length > 0) {
@@ -1442,11 +1484,14 @@ export function renderNewest(containerEl, target = null) {
   if (keydownHandler) document.removeEventListener('keydown', keydownHandler);
   if (observer) observer.disconnect();
   if (sentinelObserver) sentinelObserver.disconnect();
+  if (thumbObserver) thumbObserver.disconnect();
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
   keydownHandler = null;
   observer = null;
   sentinelObserver = null;
+  thumbObserver = null;
   visibilityHandler = null;
+  resetThumbQueue();
 
   buildLayout();
   container.appendChild(pageEl);
