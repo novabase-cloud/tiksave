@@ -294,13 +294,24 @@ export async function renderProfile(container, uid, targetItemId = null) {
             const vthumb = card.querySelector('.post-card-video-thumb');
             const loader = card.querySelector('.post-card-video-loader');
             if (thumbUrl2 && vthumb && card.isConnected) {
-              vthumb.onload = () => {
+              const hideVLoader = () => {
                 vthumb.style.display = '';
-                if (loader) loader.style.display = 'none';
+                if (loader) {
+                  loader.style.display = 'none';
+                  loader.remove();
+                }
               };
-              vthumb.onerror = () => {
-                if (loader) loader.style.display = 'none';
-              };
+              if (vthumb.complete && vthumb.naturalWidth > 0) {
+                hideVLoader();
+              } else {
+                vthumb.onload = hideVLoader;
+                vthumb.onerror = () => {
+                  if (loader) {
+                    loader.style.display = 'none';
+                    loader.remove();
+                  }
+                };
+              }
               vthumb.src = thumbUrl2;
             }
           });

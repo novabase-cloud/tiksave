@@ -112,6 +112,7 @@ class MediaViewer {
     const cached = this.imageCache.get(url);
     if (cached) {
       img.src = cached;
+      img.style.opacity = '1';
     } else {
       img.style.opacity = '0.3';
       this.loadImage(url).then(objUrl => {
@@ -169,21 +170,38 @@ class MediaViewer {
       ? el('button', { class: 'media-viewer-nav-next', 'aria-label': 'Next media', onClick: () => { this.mediaIdx++; this.render(); } }, [icon(ICONS.chevronRight, 18)])
       : null;
 
-    const loader = el('div', { class: 'media-viewer-loader' }, [
-      el('span', { class: 'spinner', style: { width: '32px', height: '32px', borderWidth: '3px' } }),
-    ]);
+    const isImageCached = item.type !== 'video' && this.imageCache.has(item.url);
+    const isMediaAlreadyLoaded = item.type === 'video'
+      ? (mediaEl.readyState >= 2)
+      : (isImageCached || (mediaEl.complete && mediaEl.naturalWidth > 0));
 
-    const hideLoader = () => { loader.remove(); };
-    if (item.type === 'video') {
-      mediaEl.addEventListener('loadeddata', hideLoader, { once: true });
-      mediaEl.addEventListener('canplay', hideLoader, { once: true });
-      mediaEl.addEventListener('error', hideLoader, { once: true });
-    } else {
-      if (this.imageCache.has(item.url)) {
-        hideLoader();
+    const loader = !isMediaAlreadyLoaded ? el('div', { class: 'media-viewer-loader' }, [
+      el('span', { class: 'spinner', style: { width: '32px', height: '32px', borderWidth: '3px' } }),
+    ]) : null;
+
+    const hideLoader = () => {
+      if (loader) {
+        loader.style.display = 'none';
+        loader.remove();
+      }
+    };
+
+    if (loader) {
+      if (item.type === 'video') {
+        if (mediaEl.readyState >= 2) {
+          hideLoader();
+        } else {
+          mediaEl.addEventListener('loadeddata', hideLoader, { once: true });
+          mediaEl.addEventListener('canplay', hideLoader, { once: true });
+          mediaEl.addEventListener('error', hideLoader, { once: true });
+        }
       } else {
-        mediaEl.addEventListener('load', hideLoader, { once: true });
-        mediaEl.addEventListener('error', hideLoader, { once: true });
+        if (mediaEl.complete && mediaEl.naturalWidth > 0) {
+          hideLoader();
+        } else {
+          mediaEl.addEventListener('load', hideLoader, { once: true });
+          mediaEl.addEventListener('error', hideLoader, { once: true });
+        }
       }
     }
 

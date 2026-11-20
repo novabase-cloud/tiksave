@@ -121,6 +121,20 @@
   border-right-color: #fff;
 }
 
+.newest2-img-loader {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.newest2-img-loader.active {
+  display: flex;
+}
+
 .newest2-thumb-sentinel {
   height: 1px;
 }

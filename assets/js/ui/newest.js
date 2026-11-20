@@ -321,29 +321,38 @@ function buildThumbnailItem(entry, index) {
     generateVideoThumbnail(src, 160).then(dataUrl => {
       if (!dataUrl || renderGen !== myGen) return;
       const img = el('img', { src: dataUrl, alt: '', loading: 'lazy' });
-      const existingLoader = item.querySelector('.newest2-thumb-loader');
-      img.onload = () => {
+      const hideVideoThumbLoader = () => {
         if (renderGen !== myGen) return;
-        if (existingLoader) existingLoader.remove();
+        const existingLoader = item.querySelector('.newest2-thumb-loader');
+        if (existingLoader) {
+          existingLoader.style.display = 'none';
+          existingLoader.remove();
+        }
       };
-      img.onerror = () => {
-        if (renderGen !== myGen) return;
-        if (existingLoader) existingLoader.style.display = 'none';
-      };
+      if (img.complete && img.naturalWidth > 0) {
+        hideVideoThumbLoader();
+      } else {
+        img.onload = hideVideoThumbLoader;
+        img.onerror = hideVideoThumbLoader;
+      }
       item.appendChild(img);
     });
   } else {
     const img = el('img', { src, alt: '', loading: 'lazy' });
-    img.onload = () => {
+    const hideImgThumbLoader = () => {
       if (renderGen !== myGen) return;
       const existingLoader = item.querySelector('.newest2-thumb-loader');
-      if (existingLoader) existingLoader.remove();
+      if (existingLoader) {
+        existingLoader.style.display = 'none';
+        existingLoader.remove();
+      }
     };
-    img.onerror = () => {
-      if (renderGen !== myGen) return;
-      const existingLoader = item.querySelector('.newest2-thumb-loader');
-      if (existingLoader) existingLoader.style.display = 'none';
-    };
+    if (img.complete && img.naturalWidth > 0) {
+      hideImgThumbLoader();
+    } else {
+      img.onload = hideImgThumbLoader;
+      img.onerror = hideImgThumbLoader;
+    }
     item.appendChild(img);
   }
 
@@ -789,6 +798,20 @@ function buildSlide(entry, index) {
     const loader = el('div', { class: 'newest2-img-loader' }, [
       el('span', { class: 'spinner' }),
     ]);
+
+    const hideSlideLoader = () => {
+      loader.classList.remove('active');
+      loader.style.display = 'none';
+      loader.remove();
+    };
+
+    if (img.complete && img.naturalWidth > 0) {
+      hideSlideLoader();
+    } else {
+      loader.classList.add('active');
+      img.addEventListener('load', hideSlideLoader, { once: true });
+      img.addEventListener('error', hideSlideLoader, { once: true });
+    }
 
     imgWrap.appendChild(img);
     imgWrap.appendChild(loader);
