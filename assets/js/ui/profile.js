@@ -2,8 +2,8 @@ import { el, icon, clear, mount } from '../utils/dom.js';
 import { listUserItems, getItemThumbnail, getItemMediaFiles, getMediaUrl } from '../api.js';
 import { store } from '../store.js';
 import { openMediaViewer } from './mediaViewer.js?v=20261120_1';
-import { generateVideoThumbnail } from '../utils/thumbUtils.js';
-import { loadResizedImage, loadCachedImage } from '../utils/cache.js';
+import { generateVideoThumbnail, getVideoPreviewUrl } from '../utils/thumbUtils.js';
+import { loadResizedImage, loadCachedImage, invalidateBackendUrl } from '../utils/cache.js';
 import { formatNumber } from '../utils/format.js';
 import { ICONS } from '../utils/icons.js?v=20261120_1';
 
@@ -159,7 +159,14 @@ export async function renderProfile(container, uid, targetItemId = null) {
 
       const card = el('div', {
         class: 'post-card',
-        onClick: () => openMediaViewer(posts, postIdx, 0, profileInfo),
+        onClick: () => {
+          const pv = card.querySelector('.post-card-preview-video');
+          if (pv) {
+            pv.style.opacity = '0';
+            pv.pause();
+          }
+          openMediaViewer(posts, postIdx, 0, profileInfo);
+        },
       }, [
         imgEl,
         isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(PLAY_ICON, 14)]) : null,
@@ -177,6 +184,84 @@ export async function renderProfile(container, uid, targetItemId = null) {
       card._thumbUrl = thumbUrl;
       card._isImage = isImage;
       card._isVideo = isVideo;
+
+      // Video hover preview (compressed & resized backend streaming)
+      if (isVideo && thumbUrl) {
+        let hoverTimeout = null;
+        let previewVideo = null;
+        let isHovered = false;
+
+        card.addEventListener('mouseenter', () => {
+          isHovered = true;
+          hoverTimeout = setTimeout(async () => {
+            if (!isHovered || !card.isConnected) return;
+
+            const wrap = card.querySelector('.post-card-video-thumb-wrap');
+            if (!wrap) return;
+
+            if (!previewVideo) {
+              previewVideo = el('video', {
+                class: 'post-card-preview-video',
+                muted: true,
+                loop: true,
+                playsinline: true,
+                preload: 'auto',
+              });
+              previewVideo.muted = true;
+              previewVideo.playsInline = true;
+
+              previewVideo.addEventListener('canplay', () => {
+                if (isHovered && previewVideo && card.isConnected) {
+                  previewVideo.style.opacity = '1';
+                  previewVideo.play().catch(() => {});
+                }
+              });
+
+              previewVideo.addEventListener('error', () => {
+                if (previewVideo && previewVideo.src !== thumbUrl) {
+                  invalidateBackendUrl();
+                  previewVideo.src = thumbUrl;
+                  previewVideo.load();
+                }
+              });
+
+              wrap.appendChild(previewVideo);
+            }
+
+            try {
+              const previewSrc = await getVideoPreviewUrl(thumbUrl, 320, 4);
+              if (isHovered && previewVideo && card.isConnected) {
+                if (previewVideo.src !== previewSrc) {
+                  previewVideo.src = previewSrc;
+                  previewVideo.load();
+                } else {
+                  previewVideo.style.opacity = '1';
+                  previewVideo.play().catch(() => {});
+                }
+              }
+            } catch {
+              if (isHovered && previewVideo && card.isConnected) {
+                previewVideo.src = thumbUrl;
+                previewVideo.load();
+              }
+            }
+          }, 180);
+        });
+
+        card.addEventListener('mouseleave', () => {
+          isHovered = false;
+          if (hoverTimeout) {
+            clearTimeout(hoverTimeout);
+            hoverTimeout = null;
+          }
+          if (previewVideo) {
+            previewVideo.style.opacity = '0';
+            previewVideo.pause();
+            previewVideo.currentTime = 0;
+          }
+        });
+      }
+
       grid.appendChild(card);
     }
 

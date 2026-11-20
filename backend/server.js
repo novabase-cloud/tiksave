@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors";
 import sharp from "sharp";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import crypto from "node:crypto";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -219,6 +223,208 @@ async function handleVideoThumbnail(req, res) {
   }
 }
 
+// ─── Video Preview Cache & Transcoder ────────────────────────────────────────
+const PREVIEW_CACHE_DIR = path.join(os.tmpdir(), "tiksave-preview-cache");
+try {
+  if (!fs.existsSync(PREVIEW_CACHE_DIR)) {
+    fs.mkdirSync(PREVIEW_CACHE_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn("Could not create preview cache dir:", e.message);
+}
+
+const inflightPreviews = new Map();
+
+function cleanupPreviewCache(maxFiles = 300) {
+  try {
+    const files = fs.readdirSync(PREVIEW_CACHE_DIR);
+    if (files.length <= maxFiles) return;
+    const stats = files
+      .map((file) => {
+        const fullPath = path.join(PREVIEW_CACHE_DIR, file);
+        try {
+          return { file: fullPath, mtime: fs.statSync(fullPath).mtimeMs };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    stats.sort((a, b) => a.mtime - b.mtime);
+    const toDelete = stats.slice(0, stats.length - maxFiles);
+    for (const item of toDelete) {
+      try {
+        fs.unlinkSync(item.file);
+      } catch {}
+    }
+  } catch (err) {
+    console.warn("Preview cache cleanup error:", err.message);
+  }
+}
+
+function transcodeVideoPreview(
+  streamUrl,
+  targetWidth,
+  targetDur,
+  targetCrf,
+  outputPath
+) {
+  return new Promise((resolve, reject) => {
+    const tempPath = `${outputPath}.tmp.${Date.now()}.${Math.random()
+      .toString(36)
+      .slice(2, 7)}.mp4`;
+
+    // Scale preserving aspect ratio: width = min(targetWidth, iw), height proportional (-2)
+    const vfScale = `scale=min(${targetWidth}\\,iw):-2`;
+
+    const args = [
+      "-ss",
+      "0",
+      "-t",
+      String(targetDur),
+      "-i",
+      streamUrl,
+      "-vf",
+      vfScale,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-crf",
+      String(targetCrf),
+      "-pix_fmt",
+      "yuv420p",
+      "-an",
+      "-movflags",
+      "+faststart",
+      "-y",
+      tempPath,
+    ];
+
+    const ff = spawn("ffmpeg", args);
+    const errChunks = [];
+
+    const timer = setTimeout(() => {
+      ff.kill("SIGKILL");
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {}
+      reject(new Error("FFmpeg preview timeout after 25s"));
+    }, 25000);
+
+    ff.stderr.on("data", (c) => errChunks.push(c));
+
+    ff.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0 && fs.existsSync(tempPath)) {
+        try {
+          const stat = fs.statSync(tempPath);
+          if (stat.size > 500) {
+            fs.renameSync(tempPath, outputPath);
+            return resolve(outputPath);
+          }
+        } catch (e) {
+          return reject(e);
+        }
+      }
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {}
+      reject(
+        new Error(
+          `FFmpeg preview failed with code ${code}: ${Buffer.concat(
+            errChunks
+          )
+            .toString()
+            .slice(-400)}`
+        )
+      );
+    });
+
+    ff.on("error", (err) => {
+      clearTimeout(timer);
+      try {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      } catch {}
+      reject(err);
+    });
+  });
+}
+
+// ─── Video Preview Handler ───────────────────────────────────────────────────
+// Usage: GET /api/video-preview?url=<video_url>&w=320&dur=4&crf=32&token=<token>
+async function handleVideoPreview(req, res) {
+  const { url, w, dur, crf } = req.query;
+
+  if (!url) {
+    return res.status(400).json({ error: "Missing 'url' query parameter" });
+  }
+
+  const token =
+    req.query.token ||
+    (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+
+  const targetWidth = Math.min(Math.max(parseInt(w, 10) || 320, 120), 720);
+  const targetDur = Math.min(Math.max(parseFloat(dur) || 4, 1.5), 10);
+  const targetCrf = Math.min(Math.max(parseInt(crf, 10) || 32, 22), 40);
+
+  const cacheKey = `vprev::${url}::w${targetWidth}::d${targetDur}::c${targetCrf}`;
+  const hash = crypto.createHash("md5").update(cacheKey).digest("hex");
+  const cacheFilePath = path.join(PREVIEW_CACHE_DIR, `preview_${hash}.mp4`);
+
+  // Check on-disk cache hit
+  try {
+    if (fs.existsSync(cacheFilePath)) {
+      const stat = fs.statSync(cacheFilePath);
+      if (stat.size > 500) {
+        res.set({
+          "Cache-Control":
+            "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+          "x-cache": "HIT",
+        });
+        return res.sendFile(cacheFilePath);
+      }
+    }
+  } catch {}
+
+  // Deduplicate concurrent transcode requests for same cacheKey
+  let promise = inflightPreviews.get(cacheKey);
+  if (!promise) {
+    promise = (async () => {
+      try {
+        const directUrl = await resolveDirectMediaUrl(url, token);
+        await transcodeVideoPreview(
+          directUrl,
+          targetWidth,
+          targetDur,
+          targetCrf,
+          cacheFilePath
+        );
+        cleanupPreviewCache(300);
+        return cacheFilePath;
+      } finally {
+        inflightPreviews.delete(cacheKey);
+      }
+    })();
+    inflightPreviews.set(cacheKey, promise);
+  }
+
+  try {
+    const finalPath = await promise;
+    res.set({
+      "Cache-Control":
+        "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400",
+      "x-cache": "MISS",
+    });
+    return res.sendFile(finalPath);
+  } catch (err) {
+    console.error(`Video preview error for ${url}:`, err.message);
+    return res.status(500).json({
+      error: "Video preview transcoding failed",
+      message: err.message,
+    });
+  }
+}
+
 // ─── Health Endpoint ────────────────────────────────────────────────────────
 app.get("/health", (req, res) => {
   res.json({
@@ -235,9 +441,19 @@ app.get("/", (req, res) => {
   res.json({
     name: "tiksave-backend-runner",
     status: "running",
-    endpoints: ["/health", "/api/resize", "/api/video-thumb", "/api/proxy"],
+    endpoints: [
+      "/health",
+      "/api/resize",
+      "/api/video-thumb",
+      "/api/video-preview",
+      "/api/proxy",
+    ],
   });
 });
+
+// ─── Video Preview Endpoint ──────────────────────────────────────────────────
+// Usage: GET /api/video-preview?url=<video_url>&w=320&dur=4&token=<hf_token>
+app.get("/api/video-preview", handleVideoPreview);
 
 // ─── Video Thumbnail Endpoint ────────────────────────────────────────────────
 // Usage: GET /api/video-thumb?url=<video_url>&w=300&q=80&token=<hf_token>

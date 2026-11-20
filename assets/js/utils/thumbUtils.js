@@ -135,3 +135,30 @@ function extractClientVideoThumbnail(videoUrl, maxDim = 300) {
     video.load();
   });
 }
+
+export async function getVideoPreviewUrl(videoUrl, maxDim = 320, dur = 4) {
+  if (!videoUrl) return null;
+
+  const hfUrl = videoUrl
+    .replace('api-tiksave.mailtestvartext.workers.dev', 'huggingface.co')
+    .replace('/proxy/', '/');
+  const qIdx = hfUrl.indexOf('?token=');
+  const baseUrl = qIdx === -1 ? hfUrl : hfUrl.slice(0, qIdx);
+  const token = qIdx === -1 ? '' : hfUrl.slice(qIdx + 7).split('&')[0];
+
+  function buildPreviewUrl(host) {
+    let u = `${host}/api/video-preview?url=${encodeURIComponent(baseUrl)}&w=${maxDim}&dur=${dur}`;
+    if (token) u += `&token=${encodeURIComponent(token)}`;
+    return u;
+  }
+
+  // 1. Primary: Use GitHub Action Runner backend if available
+  let backend = await getBackendUrl();
+  if (backend) {
+    return buildPreviewUrl(backend);
+  }
+
+  // 2. Fallback: Direct video URL if runner is offline
+  return videoUrl;
+}
+

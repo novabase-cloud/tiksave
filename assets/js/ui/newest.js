@@ -5,7 +5,8 @@ import { fetchJSON } from '../utils/http.js';
 import { navigate } from '../router.js';
 import { formatNumber } from '../utils/format.js';
 import { ICONS } from '../utils/icons.js?v=20261120_1';
-import { generateVideoThumbnail } from '../utils/thumbUtils.js';
+import { generateVideoThumbnail, getVideoPreviewUrl } from '../utils/thumbUtils.js';
+import { invalidateBackendUrl } from '../utils/cache.js';
 
 const PAGE_SIZE = 10;
 const MIN_LOAD_INTERVAL = 1500;
@@ -246,6 +247,77 @@ function buildThumbnailItem(entry, index) {
   const myGen = renderGen;
 
   if (vid) {
+    let hoverTimeout = null;
+    let previewVideo = null;
+    let isHovered = false;
+
+    item.addEventListener('mouseenter', () => {
+      isHovered = true;
+      hoverTimeout = setTimeout(async () => {
+        if (!isHovered || !item.isConnected || renderGen !== myGen) return;
+
+        if (!previewVideo) {
+          previewVideo = el('video', {
+            class: 'newest2-thumb-preview-video',
+            muted: true,
+            loop: true,
+            playsinline: true,
+            preload: 'auto',
+          });
+          previewVideo.muted = true;
+          previewVideo.playsInline = true;
+
+          previewVideo.addEventListener('canplay', () => {
+            if (isHovered && previewVideo && item.isConnected) {
+              previewVideo.style.opacity = '1';
+              previewVideo.play().catch(() => {});
+            }
+          });
+
+          previewVideo.addEventListener('error', () => {
+            if (previewVideo && previewVideo.src !== src) {
+              invalidateBackendUrl();
+              previewVideo.src = src;
+              previewVideo.load();
+            }
+          });
+
+          item.appendChild(previewVideo);
+        }
+
+        try {
+          const previewSrc = await getVideoPreviewUrl(src, 180, 4);
+          if (isHovered && previewVideo && item.isConnected) {
+            if (previewVideo.src !== previewSrc) {
+              previewVideo.src = previewSrc;
+              previewVideo.load();
+            } else {
+              previewVideo.style.opacity = '1';
+              previewVideo.play().catch(() => {});
+            }
+          }
+        } catch {
+          if (isHovered && previewVideo && item.isConnected) {
+            previewVideo.src = src;
+            previewVideo.load();
+          }
+        }
+      }, 180);
+    });
+
+    item.addEventListener('mouseleave', () => {
+      isHovered = false;
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+        hoverTimeout = null;
+      }
+      if (previewVideo) {
+        previewVideo.style.opacity = '0';
+        previewVideo.pause();
+        previewVideo.currentTime = 0;
+      }
+    });
+
     generateVideoThumbnail(src, 160).then(dataUrl => {
       if (!dataUrl || renderGen !== myGen) return;
       const img = el('img', { src: dataUrl, alt: '', loading: 'lazy' });
