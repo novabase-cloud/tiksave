@@ -211,6 +211,15 @@ export async function loadCachedImage(url, ns = 'img') {
   }
 }
 
+function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
+  if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+    return fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+  }
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+}
+
 // ─── Resized / Avatar Image Loader ──────────────────────────────────────────
 export async function loadResizedImage(url, w = 150, q = 80) {
   if (!url) return null;
@@ -258,7 +267,7 @@ export async function loadResizedImage(url, w = 150, q = 80) {
   let backend = await getBackendUrl();
   if (backend) {
     try {
-      const resp = await fetch(buildResizeUrl(backend));
+      const resp = await fetchWithTimeout(buildResizeUrl(backend), {}, 4000);
       if (resp.ok) {
         const blob = await resp.blob();
         saveToLocalMemory(blob);
@@ -272,7 +281,7 @@ export async function loadResizedImage(url, w = 150, q = 80) {
         invalidateBackendUrl();
         backend = await getBackendUrl(true);
         if (backend) {
-          const retryResp = await fetch(buildResizeUrl(backend));
+          const retryResp = await fetchWithTimeout(buildResizeUrl(backend), {}, 3000);
           if (retryResp.ok) {
             const blob = await retryResp.blob();
             saveToLocalMemory(blob);
@@ -288,7 +297,7 @@ export async function loadResizedImage(url, w = 150, q = 80) {
       backend = await getBackendUrl(true);
       if (backend) {
         try {
-          const retryResp = await fetch(buildResizeUrl(backend));
+          const retryResp = await fetchWithTimeout(buildResizeUrl(backend), {}, 3000);
           if (retryResp.ok) {
             const blob = await retryResp.blob();
             saveToLocalMemory(blob);
@@ -303,11 +312,40 @@ export async function loadResizedImage(url, w = 150, q = 80) {
 
   // 3. Fallback to Vercel image resizer if runner is not available
   try {
-    const vResp = await fetch(buildResizeUrl(IMAGE_RESIZER));
-    if (!vResp.ok) return null;
-    const blob = await vResp.blob();
-    saveToLocalMemory(blob);
-    const objUrl = URL.createObjectURL(blob);
+    const vResp = await fetchWithTimeout(buildResizeUrl(IMAGE_RESIZER), {}, 5000);
+    if (vResp.ok) {
+      const blob = await vResp.blob();
+      saveToLocalMemory(blob);
+      const objUrl = URL.createObjectURL(blob);
+      cacheSet(key, objUrl);
+      return objUrl;
+    }
+  } catch {}
+
+  // 4. Client-side downscaling fallback (prevents full-resolution 4K/10MB images from loading into DOM)
+  try {
+    const rawResp = await fetchWithTimeout(url, {}, 6000);
+    if (!rawResp.ok) return null;
+    const rawBlob = await rawResp.blob();
+
+    if (typeof createImageBitmap !== 'undefined' && typeof OffscreenCanvas !== 'undefined') {
+      try {
+        const bmp = await createImageBitmap(rawBlob);
+        const nw = w;
+        const nh = Math.round(bmp.height * (w / bmp.width));
+        const canvas = new OffscreenCanvas(nw, nh);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bmp, 0, 0, nw, nh);
+        bmp.close();
+        const smallBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: q / 100 });
+        saveToLocalMemory(smallBlob);
+        const objUrl = URL.createObjectURL(smallBlob);
+        cacheSet(key, objUrl);
+        return objUrl;
+      } catch {}
+    }
+
+    const objUrl = URL.createObjectURL(rawBlob);
     cacheSet(key, objUrl);
     return objUrl;
   } catch {

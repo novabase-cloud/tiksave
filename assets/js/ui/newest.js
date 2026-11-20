@@ -6,7 +6,7 @@ import { navigate } from '../router.js';
 import { formatNumber } from '../utils/format.js';
 import { ICONS } from '../utils/icons.js?v=20261120_1';
 import { generateVideoThumbnail, getVideoPreviewUrl } from '../utils/thumbUtils.js';
-import { getBackendUrl, invalidateBackendUrl } from '../utils/cache.js';
+import { getBackendUrl, invalidateBackendUrl, loadResizedImage } from '../utils/cache.js';
 
 const PAGE_SIZE = 10;
 const MIN_LOAD_INTERVAL = 1500;
@@ -470,27 +470,42 @@ function buildThumbnailItem(entry, index) {
     };
   } else {
     item._myGen = myGen;
-    item._loadThumb = () => {
+    item._loadThumb = (priority = false) => {
       if (!item.isConnected || renderGen !== myGen || item._loaded) return;
-      item._loaded = true;
-      if (thumbObserver) thumbObserver.unobserve(item);
+      if (item._enqueued) return;
+      item._enqueued = true;
 
-      const img = el('img', { src, alt: '', loading: 'lazy' });
-      const hideImgThumbLoader = () => {
-        if (renderGen !== myGen) return;
+      enqueueThumb(() => loadResizedImage(src, 160, 80), item, priority).then(thumbUrl => {
+        item._enqueued = false;
+        if (renderGen !== myGen || !item.isConnected) return;
+        item._loaded = true;
+        if (thumbObserver) thumbObserver.unobserve(item);
+
+        const finalSrc = thumbUrl || src;
+        const img = el('img', { src: finalSrc, alt: '', loading: 'lazy' });
+        const hideImgThumbLoader = () => {
+          if (renderGen !== myGen) return;
+          const existingLoader = item.querySelector('.newest2-thumb-loader');
+          if (existingLoader) {
+            existingLoader.style.display = 'none';
+            existingLoader.remove();
+          }
+        };
+        if (img.complete && img.naturalWidth > 0) {
+          hideImgThumbLoader();
+        } else {
+          img.onload = hideImgThumbLoader;
+          img.onerror = hideImgThumbLoader;
+        }
+        item.appendChild(img);
+      }).catch(() => {
+        item._enqueued = false;
         const existingLoader = item.querySelector('.newest2-thumb-loader');
         if (existingLoader) {
           existingLoader.style.display = 'none';
           existingLoader.remove();
         }
-      };
-      if (img.complete && img.naturalWidth > 0) {
-        hideImgThumbLoader();
-      } else {
-        img.onload = hideImgThumbLoader;
-        img.onerror = hideImgThumbLoader;
-      }
-      item.appendChild(img);
+      });
     };
   }
 
