@@ -34,18 +34,35 @@ const thumbQueue = [];
 
 function processThumbQueue() {
   while (thumbPending < MAX_CONCURRENT_THUMBS && thumbQueue.length > 0) {
-    const next = thumbQueue.shift();
+    const task = thumbQueue.shift();
+    if (task.item) {
+      if (!task.item.isConnected || task.item._myGen !== renderGen) {
+        continue;
+      }
+      if (!task.item._inView && !task.item._loaded) {
+        task.item._enqueued = false;
+        continue;
+      }
+    }
     thumbPending++;
-    next().finally(() => {
+    task.run().finally(() => {
       thumbPending--;
       processThumbQueue();
     });
   }
 }
 
-function enqueueThumb(fn) {
+function enqueueThumb(fn, item = null, priority = false) {
   return new Promise((resolve, reject) => {
-    thumbQueue.push(() => fn().then(resolve, reject));
+    const task = {
+      item,
+      run: () => fn().then(resolve, reject),
+    };
+    if (priority) {
+      thumbQueue.unshift(task);
+    } else {
+      thumbQueue.push(task);
+    }
     processThumbQueue();
   });
 }
@@ -414,10 +431,18 @@ function buildThumbnailItem(entry, index) {
       }
     });
 
-    item._loadThumb = () => {
-      if (!item.isConnected || renderGen !== myGen) return;
-      enqueueThumb(() => generateVideoThumbnail(src, 160)).then(dataUrl => {
+    item._myGen = myGen;
+    item._loadThumb = (priority = false) => {
+      if (!item.isConnected || renderGen !== myGen || item._loaded) return;
+      if (item._enqueued) return;
+      item._enqueued = true;
+
+      enqueueThumb(() => generateVideoThumbnail(src, 160), item, priority).then(dataUrl => {
+        item._enqueued = false;
         if (!dataUrl || renderGen !== myGen || !item.isConnected) return;
+        item._loaded = true;
+        if (thumbObserver) thumbObserver.unobserve(item);
+
         const img = el('img', { src: dataUrl, alt: '', loading: 'lazy' });
         const hideVideoThumbLoader = () => {
           if (renderGen !== myGen) return;
@@ -435,6 +460,7 @@ function buildThumbnailItem(entry, index) {
         }
         item.appendChild(img);
       }).catch(() => {
+        item._enqueued = false;
         const existingLoader = item.querySelector('.newest2-thumb-loader');
         if (existingLoader) {
           existingLoader.style.display = 'none';
@@ -443,8 +469,12 @@ function buildThumbnailItem(entry, index) {
       });
     };
   } else {
+    item._myGen = myGen;
     item._loadThumb = () => {
-      if (!item.isConnected || renderGen !== myGen) return;
+      if (!item.isConnected || renderGen !== myGen || item._loaded) return;
+      item._loaded = true;
+      if (thumbObserver) thumbObserver.unobserve(item);
+
       const img = el('img', { src, alt: '', loading: 'lazy' });
       const hideImgThumbLoader = () => {
         if (renderGen !== myGen) return;
@@ -481,7 +511,6 @@ function renderThumbnailBatch(batch, startIdx) {
       thumbObserver.observe(item);
     } else if (item._loadThumb) {
       item._loadThumb();
-      item._loadThumb = null;
     }
   });
 
@@ -1305,15 +1334,17 @@ function buildLayout() {
   if (thumbObserver) thumbObserver.disconnect();
   thumbObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
       const itemEl = entry.target;
-      thumbObserver.unobserve(itemEl);
-      if (itemEl._loadThumb) {
-        itemEl._loadThumb();
-        itemEl._loadThumb = null;
+      if (entry.isIntersecting) {
+        itemEl._inView = true;
+        if (!itemEl._loaded && itemEl._loadThumb) {
+          itemEl._loadThumb(true);
+        }
+      } else {
+        itemEl._inView = false;
       }
     }
-  }, { root: thumbContainer, rootMargin: '250px' });
+  }, { root: thumbContainer, rootMargin: '80px 0px' });
 
   feedEl = el('div', { class: 'newest2-feed' });
 
@@ -1428,7 +1459,6 @@ function restoreCachedItems() {
       thumbObserver.observe(thumb);
     } else if (thumb._loadThumb) {
       thumb._loadThumb();
-      thumb._loadThumb = null;
     }
   }
 

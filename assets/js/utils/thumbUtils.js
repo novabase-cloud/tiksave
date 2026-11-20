@@ -1,5 +1,38 @@
 import { cacheGet, cacheSet, getBackendUrl, invalidateBackendUrl } from './cache.js';
 
+// Hardware video decoder semaphore: strictly max 1 concurrent client-side video decode
+// This completely avoids GPU decoder slot contention and eliminates main thread frame drops.
+const MAX_CLIENT_DECODERS = 1;
+let activeClientDecoders = 0;
+const clientDecoderQueue = [];
+
+function processClientDecoderQueue() {
+  while (activeClientDecoders < MAX_CLIENT_DECODERS && clientDecoderQueue.length > 0) {
+    const next = clientDecoderQueue.shift();
+    activeClientDecoders++;
+    next().finally(() => {
+      activeClientDecoders--;
+      processClientDecoderQueue();
+    });
+  }
+}
+
+function queueClientVideoExtraction(fn) {
+  return new Promise((resolve, reject) => {
+    clientDecoderQueue.push(() => fn().then(resolve, reject));
+    processClientDecoderQueue();
+  });
+}
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 4000) {
+  if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+    return fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+  }
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+}
+
 export async function generateVideoThumbnail(videoUrl, maxDim = 300) {
   if (!videoUrl) return null;
   const key = 'vthumb:' + maxDim + ':' + videoUrl;
@@ -23,7 +56,7 @@ export async function generateVideoThumbnail(videoUrl, maxDim = 300) {
   let backend = await getBackendUrl();
   if (backend) {
     try {
-      const resp = await fetch(buildThumbUrl(backend));
+      const resp = await fetchWithTimeout(buildThumbUrl(backend), {}, 4000);
       if (resp.ok) {
         const blob = await resp.blob();
         const objUrl = URL.createObjectURL(blob);
@@ -36,7 +69,7 @@ export async function generateVideoThumbnail(videoUrl, maxDim = 300) {
         invalidateBackendUrl();
         backend = await getBackendUrl(true);
         if (backend) {
-          const retryResp = await fetch(buildThumbUrl(backend));
+          const retryResp = await fetchWithTimeout(buildThumbUrl(backend), {}, 3000);
           if (retryResp.ok) {
             const blob = await retryResp.blob();
             const objUrl = URL.createObjectURL(blob);
@@ -46,12 +79,12 @@ export async function generateVideoThumbnail(videoUrl, maxDim = 300) {
         }
       }
     } catch {
-      // Network error: tunnel dead or expired. Refresh with 3s debounce
+      // Network error / timeout: tunnel dead or expired. Refresh with 3s debounce
       invalidateBackendUrl();
       backend = await getBackendUrl(true);
       if (backend) {
         try {
-          const retryResp = await fetch(buildThumbUrl(backend));
+          const retryResp = await fetchWithTimeout(buildThumbUrl(backend), {}, 3000);
           if (retryResp.ok) {
             const blob = await retryResp.blob();
             const objUrl = URL.createObjectURL(blob);
@@ -63,9 +96,9 @@ export async function generateVideoThumbnail(videoUrl, maxDim = 300) {
     }
   }
 
-  // 2. Fallback: Client-side <video> + canvas extraction (only if runner is unavailable)
+  // 2. Fallback: Client-side <video> + canvas extraction (strictly queued & throttled)
   try {
-    const dataUrl = await extractClientVideoThumbnail(videoUrl, maxDim);
+    const dataUrl = await queueClientVideoExtraction(() => extractClientVideoThumbnail(videoUrl, maxDim));
     if (dataUrl) {
       cacheSet(key, dataUrl);
       return dataUrl;
@@ -79,25 +112,48 @@ export async function generateVideoThumbnail(videoUrl, maxDim = 300) {
 
 function extractClientVideoThumbnail(videoUrl, maxDim = 300) {
   return new Promise((resolve) => {
+    let settled = false;
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
+    video.playsInline = true;
     video.crossOrigin = 'anonymous';
-    video.src = videoUrl;
+
+    let timeoutId = null;
 
     const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
       video.onloadedmetadata = null;
       video.onseeked = null;
       video.onerror = null;
-      video.removeAttribute('src');
-      video.load();
+      try {
+        video.pause();
+        video.removeAttribute('src');
+        video.src = '';
+        video.load();
+      } catch {}
     };
 
+    const done = (result) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+
+    // 8-second safety timeout so dead links or decoder stalls never permanently lock the slot
+    timeoutId = setTimeout(() => done(null), 8000);
+
     video.onloadedmetadata = () => {
+      if (settled) return;
       video.currentTime = Math.min(1, (video.duration || 10) * 0.1);
     };
 
-    video.onseeked = () => {
+    video.onseeked = async () => {
+      if (settled) return;
       try {
         const vw = video.videoWidth || 300;
         const vh = video.videoHeight || 300;
@@ -110,28 +166,60 @@ function extractClientVideoThumbnail(videoUrl, maxDim = 300) {
           cw = Math.round(vw * (maxDim / vh));
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = cw;
-        canvas.height = ch;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(video, 0, 0, cw, ch);
+        // Fast off-thread path: OffscreenCanvas + createImageBitmap
+        if (typeof OffscreenCanvas !== 'undefined' && typeof createImageBitmap !== 'undefined') {
+          try {
+            const bitmap = await createImageBitmap(video);
+            const canvas = new OffscreenCanvas(cw, ch);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(bitmap, 0, 0, cw, ch);
+            bitmap.close();
+            const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.82 });
+            const objUrl = URL.createObjectURL(blob);
+            done(objUrl);
+            return;
+          } catch {
+            // fallback to DOM canvas below if OffscreenCanvas fails (e.g. security origin)
+          }
+        }
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        cleanup();
-        resolve(dataUrl);
+        // DOM canvas fallback: yield to browser paint frame first to avoid scroll jank
+        requestAnimationFrame(() => {
+          if (settled) return;
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = cw;
+            canvas.height = ch;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(video, 0, 0, cw, ch);
+
+            if (canvas.toBlob) {
+              canvas.toBlob((blob) => {
+                if (blob) {
+                  done(URL.createObjectURL(blob));
+                } else {
+                  done(canvas.toDataURL('image/jpeg', 0.82));
+                }
+              }, 'image/jpeg', 0.82);
+            } else {
+              done(canvas.toDataURL('image/jpeg', 0.82));
+            }
+          } catch {
+            done(null);
+          }
+        });
       } catch {
-        cleanup();
-        resolve(null);
+        done(null);
       }
     };
 
     video.onerror = () => {
-      cleanup();
-      resolve(null);
+      done(null);
     };
 
+    video.src = videoUrl;
     video.load();
   });
 }
@@ -161,4 +249,3 @@ export async function getVideoPreviewUrl(videoUrl, maxDim = 320, dur = 4) {
   // 2. Fallback: Direct video URL if runner is offline
   return videoUrl;
 }
-
