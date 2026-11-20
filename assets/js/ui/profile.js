@@ -33,7 +33,7 @@ function _enqueue(fn) {
   });
 }
 
-export async function renderProfile(container, uid) {
+export async function renderProfile(container, uid, targetItemId = null) {
   clear(container);
   window.scrollTo(0, 0);
   store.set({ loading: true, error: null, currentUser: uid, view: 'profile' });
@@ -112,6 +112,15 @@ export async function renderProfile(container, uid) {
     const grid = el('div', { class: 'post-grid' });
     const posts = [];
 
+    const profileInfo = {
+      username: displayName,
+      nickname,
+      followers,
+      userInfo,
+      uid,
+    };
+    store.set({ currentPosts: posts, currentProfileInfo: profileInfo });
+
     for (const [postIdx, item] of items.entries()) {
       const thumbUrl = getItemThumbnail(item);
       const mediaFiles = getItemMediaFiles(item);
@@ -150,12 +159,7 @@ export async function renderProfile(container, uid) {
 
       const card = el('div', {
         class: 'post-card',
-        onClick: () => openMediaViewer(posts, postIdx, 0, {
-          username: displayName,
-          nickname,
-          followers,
-          userInfo,
-        }),
+        onClick: () => openMediaViewer(posts, postIdx, 0, profileInfo),
       }, [
         imgEl,
         isVideo ? el('div', { class: 'post-card-video-indicator' }, [icon(PLAY_ICON, 14)]) : null,
@@ -177,6 +181,13 @@ export async function renderProfile(container, uid) {
     }
 
     container.appendChild(grid);
+
+    if (targetItemId) {
+      const targetIdx = posts.findIndex(p => String(p.itemId) === String(targetItemId));
+      if (targetIdx !== -1) {
+        openMediaViewer(posts, targetIdx, 0, profileInfo);
+      }
+    }
 
     // Lazy-load thumbnails via IntersectionObserver
     const obs = new IntersectionObserver((entries) => {

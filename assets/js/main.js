@@ -11,6 +11,7 @@ import { cacheClear } from './utils/cache.js';
 import { initLogin, renderLogin } from './ui/login.js';
 import { renderUserList } from './ui/userList.js';
 import { renderProfile, resetProfileQueue } from './ui/profile.js';
+import { openMediaViewer, closeMediaViewer, isMediaViewerOpen } from './ui/mediaViewer.js?v=20261120_1';
 import { renderNewest, resetNewestCache, destroyNewest } from './ui/newest.js';
 import { initSidebar, getSidebarToggleButton, closeSidebar } from './ui/sidebar.js';
 
@@ -140,13 +141,39 @@ function handleRoute(path) {
   }
   main.classList.remove('newest-active');
 
-  if (p === 'login') return;
-  if (p === '' || p === '/') { renderUserList(main); return; }
+  if (p === 'login') {
+    closeMediaViewer();
+    return;
+  }
+  if (p === '' || p === '/') {
+    closeMediaViewer();
+    renderUserList(main);
+    return;
+  }
   if (p.startsWith('profile/')) {
-    renderProfile(main, p.slice(8));
+    const parts = p.slice(8).split('/').filter(Boolean);
+    const uid = parts[0];
+    const targetItemId = parts[1] || null;
+
+    if (store.state.currentUser === uid && isMediaViewerOpen() && !targetItemId) {
+      closeMediaViewer();
+      return;
+    }
+
+    if (store.state.currentUser === uid && targetItemId && store.state.currentPosts) {
+      const idx = store.state.currentPosts.findIndex(item => String(item.itemId) === String(targetItemId));
+      if (idx !== -1) {
+        openMediaViewer(store.state.currentPosts, idx, 0, store.state.currentProfileInfo);
+        return;
+      }
+    }
+
+    closeMediaViewer();
+    renderProfile(main, uid, targetItemId);
     return;
   }
   if (p === 'newest' || p.startsWith('newest/')) {
+    closeMediaViewer();
     const parts = p.split('/');
     const targetUid = parts[1] || null;
     const targetItemId = parts[2] || null;

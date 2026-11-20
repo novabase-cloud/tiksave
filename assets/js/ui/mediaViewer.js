@@ -47,11 +47,19 @@ class MediaViewer {
       document.removeEventListener('keydown', this.keydownHandler);
       this.keydownHandler = null;
     }
+    const uid = this.profileInfo?.uid || (this.posts[this.postIdx]?.path ? this.posts[this.postIdx].path.split('/')[1] : null);
+    if (uid) {
+      const profileHash = `#/profile/${uid}`;
+      if (window.location.hash !== profileHash && window.location.hash.startsWith(`#/profile/${uid}`)) {
+        window.history.replaceState(null, '', profileHash);
+      }
+    }
     if (this.backdrop) {
-      this.backdrop.style.opacity = '0';
-      this.backdrop.addEventListener('transitionend', () => {
-        this.backdrop.remove();
-        this.backdrop = null;
+      const bd = this.backdrop;
+      this.backdrop = null;
+      bd.style.opacity = '0';
+      bd.addEventListener('transitionend', () => {
+        bd.remove();
       }, { once: true });
     }
     this.posts = [];
@@ -118,6 +126,15 @@ class MediaViewer {
     const file = this.currentFile();
     const totalPosts = this.posts.length;
     const totalMedia = post?.media?.length || 1;
+
+    const uid = this.profileInfo?.uid || (post?.path ? post.path.split('/')[1] : null);
+    const itemId = post?.itemId;
+    if (uid && itemId) {
+      const targetHash = `#/profile/${uid}/${itemId}`;
+      if (window.location.hash !== targetHash) {
+        window.history.replaceState(null, '', targetHash);
+      }
+    }
 
     const closeBtn = el('button', {
       class: 'media-viewer-close',
@@ -388,3 +405,5 @@ class MediaViewer {
 
 const instance = new MediaViewer();
 export const openMediaViewer = (...args) => instance.open(...args);
+export const closeMediaViewer = () => instance.close();
+export const isMediaViewerOpen = () => !!instance.backdrop;
