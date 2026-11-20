@@ -801,8 +801,6 @@ function buildSlide(entry, index) {
 
     const hideSlideLoader = () => {
       loader.classList.remove('active');
-      loader.style.display = 'none';
-      loader.remove();
     };
 
     if (img.complete && img.naturalWidth > 0) {
@@ -878,7 +876,10 @@ function navigateImage(slideIndex, dir) {
   if (img) img.style.opacity = '0.25';
 
   const startTime = Date.now();
+  let done = false;
   const applyImage = () => {
+    if (done) return;
+    done = true;
     const elapsed = Date.now() - startTime;
     const minDelay = 180;
     const remaining = Math.max(0, minDelay - elapsed);
@@ -905,6 +906,9 @@ function navigateImage(slideIndex, dir) {
     }
   };
   pre.src = src;
+  if (pre.complete && pre.naturalWidth > 0) {
+    applyImage();
+  }
 
   if (cur + 1 < max) {
     const n1 = mediaUrl(entry.uid, entry.itemId, 'jpg', cur + 1);

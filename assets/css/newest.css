@@ -135,6 +135,14 @@
   display: flex;
 }
 
+.newest2-img-loader .spinner {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+  border-color: rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+}
+
 .newest2-thumb-sentinel {
   height: 1px;
 }
